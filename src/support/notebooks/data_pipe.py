@@ -8,8 +8,8 @@ import random
 
 
 # %%
-root_dir = '../../../data/data/Desc_dataset/'
-style_enc_file = '../../../data/data/Desc_dataset/style_enc.csv'
+root_dir = '../../../data/data/Desc_dataset/'  #config params
+style_enc_file = '../../../data/data/Desc_dataset/style_enc.csv' #config params
 
 # %% [markdown]
 # ## rename files by giving style index
@@ -44,6 +44,7 @@ import tensorflow as tf
 # %%
 root_path = pathlib.Path(root_dir)
 list_ds = tf.data.Dataset.list_files(str(root_path/'*.jpg'))
+list_ds = list_ds.shuffle(buffer_size=1000)
 stenc_df = pd.read_csv(style_enc_file)['style_code'].tolist()
 LEN = len(stenc_df)
 
@@ -65,18 +66,18 @@ for f in list_ds.take(5):
 
 
 
-# %%
 def process_path(file_path):
   label = tf.strings.split(file_path, os.sep)[-2]
   return tf.io.read_file(file_path)
 
 
-# %%
-
-IMG_WIDTH, IMG_HEIGHT = 32 , 32
+IMG_WIDTH, IMG_HEIGHT = 128, 128 #config params
 def process_img(img):
   img = tf.image.decode_jpeg(img, channels=3) 
   img = tf.image.convert_image_dtype(img, tf.float32) 
+  rnd_state = random.randint(0,1)
+  if rnd_state:
+      img = tf.image.random_crop(img, (IMG_WIDTH, IMG_HEIGHT,3))
   return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
 
 def process_path(file_path):
@@ -84,8 +85,12 @@ def process_path(file_path):
     cur_ind = str_file_path.split(os.sep)[-1].strip('.jpg')
     cur_style = stenc_df[int(cur_ind)-1]
     random_num = random.randint(0, LEN)
-    if random_num == int(cur_ind):
-        random_num = random.randint(0, LEN)
+    random_bool = random.randint(0,1)
+    if random_bool:
+        if random_num == int(cur_ind):
+            random_num = random.randint(0, LEN)
+    else:
+        random_num = max(random.randint(0,10), int(cur_ind)-5)
     rand_style = stenc_df[random_num-1]
     cur_img = process_img(tf.io.read_file(file_path))
     rand_path = tf.strings.join([*str_file_path.split(os.sep)[:-1],f'{random_num}.jpg'],os.sep)
@@ -98,17 +103,31 @@ def process_path(file_path):
 
     return cur_img, rand_img, label
 
-# def load_audio_file(file_path):
-#     # you should decode bytes type to string type
-#     print("file_path: ",bytes.decode(file_path.numpy()),type(bytes.decode(file_path.numpy())))
-#     return file_path
+sample_ds = list_ds.map(lambda x: tf.py_function(process_path, [x], [tf.float32, tf.float32, tf.int32]))
+#sample_dt = sample_ds.shuffle(buffer_size=1000)   #config param
+batched_dt = sample_ds.batch(16)  #config param
 
-sample_dt = list_ds.map(lambda x: tf.py_function(process_path, [x], [tf.float32, tf.float32, tf.int32]))
-for f in sample_dt.take(500):
-    print(f[2])
+#%%
+from matplotlib import pyplot as plt
+
+# %% 
+# dataset sampling vis.
+num = 10
+i = 0
+for f in sample_ds.take(num):
+    i+=1
+    label = f[2].numpy()
+    fir_img = f[0].numpy()*255
+    sec_img = f[1].numpy()*255
+    plt.subplot(2, num, i)
+    plt.axis('off')
+    plt.title(str(label))
+    plt.imshow(fir_img.astype('uint8'))
+
+    plt.subplot(2, num, i+num)
+    plt.axis('off')
+    plt.title(str(label))
+    plt.imshow(sec_img.astype('uint8'))
 
 
 # %%
-
-
-
