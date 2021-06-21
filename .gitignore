@@ -1,6 +1,8 @@
 
 #sub-folders
 /data/
+/logs/
+/plugins/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
