@@ -17,12 +17,15 @@ from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspo
 from tensorflow.keras import losses
 from tensorflow.keras import metrics 
 from tensorflow.keras.callbacks import TensorBoard
+from matplotlib import pyplot as plt
+from livelossplot import PlotLosses
+from livelossplot.outputs import MatplotlibPlot
 #%%
 #tensorboard logger
 logdir = config.LOG_DIR+ "/desc_pre_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1)
 
-tf.profiler.experimental.server.start(6009)
+# tf.profiler.experimental.server.start(6009)
 
 # set logger
 logging.basicConfig()
@@ -99,12 +102,42 @@ def define_descrminator(image_size):
     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
     return model
 
+class RankingMetrics(tf.keras.metrics.Metric):
+
+    def __init__(self, name='pairwise_ranking_loss', **kwargs):
+        super(RankingMetrics, self).__init__(name=name, **kwargs)
+        
+        self.relative_acc = self.add_weight(name='rel_acc', initializer='zeros')
+        self.ranking_loss = self.add_weight(name='ranking_loss', initializer='zeros')
+
+    def update_state(self, y_ref, y_style, label):
+        m  = tf.cast(tf.broadcast_to(config.M, shape=y_ref.shape), dtype=tf.float32)
+        u  = tf.cast(tf.broadcast_to(0, shape=y_ref.shape), dtype=tf.float32)
+        i  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
+        y = tf.cast(label[..., tf.newaxis], dtype=tf.float32)
+        dist = tf.norm(y_ref-y_style, ord='euclidean', axis=-1, keepdims=True)
+        loss = y*dist + (i-y)*tf.reduce_max(tf.stack([u,m-dist]), axis=0)
+        rk_loss = tf.reduce_mean(loss)
+        self.ranking_loss.assign(rk_loss)
+
+        prb = dist/m
+        bool_prb = tf.cast(tf.math.floor(prb), dtype=tf.bool)
+        bool_lbl = tf.cast(label, dtype=tf.bool)
+        rel_acc = tf.reduce_mean(tf.cast(tf.math.logical_not(tf.math.logical_xor(bool_prb, bool_lbl)), dtype=tf.float32))
+        self.relative_acc.assign(rel_acc)
+        
+
+
+    def result(self):
+        return self.relative_acc, self.ranking_loss
+
 epochs = config.DESC_EPOCHS
 opt = Adam(lr=config.DESC_INIT_LR)
 desc_loss = losses.Hinge()
-train_metrics = metrics.Hinge()
-val_metrics = metrics.Hinge()
+train_metrics = RankingMetrics()
+val_metrics = RankingMetrics()
 desc_pre_model = define_descrminator((config.IMG_WIDTH, config.IMG_HEIGHT, 3))
+
 
 def pairWiseRankingLoss(y_ref, y_style, label):
     m  = tf.cast(tf.broadcast_to(config.M, shape=y_ref.shape), dtype=tf.float32)
@@ -123,17 +156,17 @@ def train_step(ref_in, style_in, label_in):
         loss = pairWiseRankingLoss(ref_out, style_out, label_in)
     grads = tape.gradient(loss, desc_pre_model.trainable_weights)
     opt.apply_gradients(zip(grads, desc_pre_model.trainable_weights))
-    #train_metrics.update(ref_out, style_out)
+    train_metrics.update_state(ref_out, style_out, label_in)
     return loss
 
 @tf.function
 def val_step(ref_in, style_in, label_in):
     ref_out = desc_pre_model(ref_in)
     style_out = desc_pre_model(style_in)
-    val_metrics.update(ref_out, style_out)
+    val_metrics.update_state(ref_out, style_out, label_in)
 
 tensorboard_callback.set_model(desc_pre_model)
-
+plotlosses = PlotLosses(outputs=[MatplotlibPlot()])
 for epoch in range(epochs):
     print("\nStart of epoch %d" % (epoch,))
     start_time = time.time()
@@ -141,7 +174,6 @@ for epoch in range(epochs):
     # Iterate over the batches of the dataset.
     for step, (ref_batch_train, style_batch_train, label_batch_train) in enumerate(train_dataset):
         loss_value = train_step(ref_batch_train, style_batch_train, label_batch_train)
-
         # Log every 200 batches.
         if step % 200 == 0:
             print(
@@ -151,11 +183,13 @@ for epoch in range(epochs):
             print("Seen so far: %d samples" % ((step + 1) * 64))
 
     # Display metrics at the end of each epoch.
-    # train_acc = train_metrics.result()
-    # print("Training acc over epoch: %.4f" % (float(train_acc),))
-
+    
+    train_acc = train_metrics.result()
+    print(f" Epoch [{epoch}] : relative accuracy : {train_acc[0]}, ranking loss : {train_acc[1]}")
+    # plotlosses.update({'ranking_loss' : train_acc[1], 'relative_accuracy' : train_acc[0]})
+    # plotlosses.send()
     # # Reset training metrics at the end of each epoch
-    # train_metrics.reset_states()
+    train_metrics.reset_states()
 
     # Run a validation loop at the end of each epoch.
     # for x_batch_val, y_batch_val in val_dataset:
@@ -166,7 +200,7 @@ for epoch in range(epochs):
     # print("Validation acc: %.4f" % (float(val_acc),))
     print("Time taken: %.2fs" % (time.time() - start_time))
 
-tf.profiler.experimental.client.trace('grpc://localhost:6009',
-                                      config.LOG_DIR+'/profilers', 2000)
+# tf.profiler.experimental.client.trace('grpc://localhost:6009',
+#                                       config.LOG_DIR+'/profilers', 2000)
 
 # %%
