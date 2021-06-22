@@ -21,14 +21,14 @@ def define_descrminator(image_size):
     init = RandomNormal(stddev=0.02)
     input_img = Input(shape=image_size)
     # C64
-    d = Conv2D(64, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(input_img)
+    d = Conv2D(64, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(input_img)
     d = LeakyReLU(alpha=0.2)(d)
 	# C128
-    d = Conv2D(128, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(128, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
 	# C256
-    d = Conv2D(256, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(256, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
     # flatten
@@ -37,7 +37,10 @@ def define_descrminator(image_size):
     output = Dense(1)(flt)
     #build and compile the model
     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
-    return output
+    return model
+
+desc_pre_model = define_descrminator((128, 128, 3))
+desc_pre_model.summary()    
 #%%
 
 desc_pre_model = define_descrminator((128, 128, 3))
