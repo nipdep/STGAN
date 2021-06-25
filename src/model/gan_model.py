@@ -327,7 +327,7 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
         dc_loss = dc_train_step(Xdc_cnt, Xdc_trn, ydc)
         #dc_loss2 = dc_train_step(X_cnt, X_fake_trn, ydc_fake)
         #train GAN model
-        gan_total_loss, gan_dss_loss, gan_dsc_loss, gen_loss = gan_train_step(X_cnt, X_stl, X_fake_trn, ydc_real, yds_real)
+        gan_total_loss, gan_dss_loss, gan_dsc_loss, gen_loss = gan_train_step(X_cnt, X_stl, X_trn, ydc_real, yds_real)
 
         logger.info(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
         # if (i+1) % (batch_per_epoch*log_interval) == 0:
