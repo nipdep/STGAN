@@ -6,6 +6,7 @@ GAN_LOG_DIR = './logs/gan'
 DESC_ROOT_DIR = './data/data/Desc_dataset/'  
 DESC_ENC_DIR = './data/data/Desc_dataset/style_enc.csv'
 GAN_DATASET_DIR = './data/data/comp_matrics.npz'
+GAN_DATASET_URL = 'https://anonfiles.com/V0Ica633u1/comp_matrics_npz'
 
 # image parameters
 #from support.notebooks.data_pipe import IMG_HEIGHT
