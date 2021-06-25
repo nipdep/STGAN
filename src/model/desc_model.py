@@ -79,19 +79,42 @@ sample_ds = list_ds.map(lambda x: tf.py_function(process_path, [x], [tf.float32,
 batched_dt = sample_ds.batch(batch_size=config.DESC_BATCH_SIZE)
 train_dataset = batched_dt.cache().prefetch(tf.data.AUTOTUNE)
 
-# TODO://layers and width parameter tune
+# # TODO: [conv overlapping model]//layers and width parameter tune
+# def define_descrminator(image_size):
+#     init = RandomNormal(stddev=0.02)
+#     input_img = Input(shape=image_size)
+#     # C64
+#     d = Conv2D(64, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(input_img)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C128
+#     d = Conv2D(128, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C256
+#     d = Conv2D(256, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+#     # flatten
+#     flt = Flatten()(d)
+#     # linear logits layer
+#     output = Dense(1)(flt)
+#     #build and compile the model
+#     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
+#     return model
+
+# TODO: [conv non-overlapping model]//layers and width parameter tune
 def define_descrminator(image_size):
     init = RandomNormal(stddev=0.02)
     input_img = Input(shape=image_size)
     # C64
-    d = Conv2D(64, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(input_img)
+    d = Conv2D(64, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(input_img)
     d = LeakyReLU(alpha=0.2)(d)
 	# C128
-    d = Conv2D(128, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(128, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
 	# C256
-    d = Conv2D(256, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(256, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
     # flatten
