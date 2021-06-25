@@ -13,6 +13,7 @@ import tensorflow as tf
 import numpy as np
 from numpy import load, zeros, ones
 from numpy.random import randint
+from sklearn.utils import shuffle
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.models import Model
@@ -58,7 +59,7 @@ def define_decoder_block(layer_in, skip_in, n_filters, dropout=True):
     g = ReLU()(g)
     return g
 
-def defing_generator(image_shape=(128, 128, 3)):
+def defing_generator(latent_size, image_shape=(128, 128, 3)):
     init = RandomNormal(stddev=0.02)
     content_image = Input(shape=image_shape)
     style_image = Input(shape=image_shape)
@@ -73,7 +74,7 @@ def defing_generator(image_shape=(128, 128, 3)):
     e6 = define_encoder_block(e5, 512)
     #e7 = define_encoder_block(e6, 512)
     # bottleneck layer
-    b = Conv2D(512, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(e6)
+    b = Conv2D(latent_size, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(e6)
     b = ReLU()(b)
     #decoder model
     #d1 = define_decoder_block(b, e7, 512)
@@ -89,9 +90,8 @@ def defing_generator(image_shape=(128, 128, 3)):
     model = Model(inputs=[content_image, style_image], outputs=out_image, name='generator')
     return model
 
-g_model = defing_generator(config.IMAGE_SHAPE)
+g_model = defing_generator(config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
 #tf.keras.utils.plot_model(g_model, show_shapes=True)
-
 
 def define_cnt_descriminator(image_shape=(128, 128, 3)):
     init = RandomNormal(stddev=0.02)
@@ -270,7 +270,6 @@ def generate_fake_samples(g_model, samples, patch_shape):
     y_ds = zeros((len(X)))
     return X, y_dc, y_ds
 
-
 def summarize_performance(step, g_model, dataset, n_samples=3):
     [X_cnt, X_stl, X_trn], _, _ = generate_real_samples(dataset, n_samples, 1)
     X_fake, _, _ = generate_fake_samples(g_model, [X_cnt, X_stl], 1)
@@ -298,44 +297,66 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
     # save model checkpoint
     model_filename = f'model_{step+1}.h5'
     g_model.save(os.path.join(config.GAN_LOG_DIR,model_filename))
-    print(f">> Saved : {filename} , {model_filename} ")
+    logger.info(f">> Saved : {filename} , {model_filename} ")
 
 
 def train(g_model, dataset, n_epoch=100, batch_size=16):
     n_patch = dc_model.output_shape[1]
-    batch_per_epoch = len(dataset[1])//batch_size
+    batch_per_epoch = (dataset[1].shape[0]*dataset[1].shape[1])//batch_size
     n_steps = n_epoch*batch_per_epoch
     plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'dss model' : ['dss_loss'], 'dsc model' : ['dsc_loss'], 'gan model' : ['total_loss', 'gen_loss', 'gans_loss', 'ganc_loss']})
+
+    save_interval = 10
+    log_interval = 1
 
     for i in range(n_steps):
         [X_cnt, X_stl, X_trn], ydc_real, yds_real = generate_real_samples(dataset, batch_size, n_patch)
         X_fake_trn, ydc_fake, yds_fake = generate_fake_samples(g_model, [X_cnt, X_stl], n_patch)
         # train style descriminator
-        ds_loss1 = ds_train_step(X_stl, X_trn, yds_real)
-        ds_loss2 = ds_train_step(X_stl, X_fake_trn, yds_fake)
+        usXds_stl = np.concatenate((X_stl, X_stl))
+        usXds_trn = np.concatenate((X_trn, X_fake_trn))
+        usysd = np.concatenate((yds_real, yds_fake))
+        Xds_stl, Xds_trn, yds = shuffle(usXds_stl, usXds_trn, usysd)
+        ds_loss = ds_train_step(Xds_stl, Xds_trn, yds)
+        #ds_loss2 = ds_train_step(X_stl, X_fake_trn, yds_fake)
         #train content descriminator
-        dc_loss1 = dc_train_step(X_cnt, X_trn, ydc_real)
-        dc_loss2 = dc_train_step(X_cnt, X_fake_trn, ydc_fake)
+        usXdc_cnt = np.concatenate((X_cnt, X_cnt))
+        usXdc_trn = np.concatenate((X_trn, X_fake_trn))
+        usydc = np.concatenate((ydc_real, ydc_fake))
+        Xdc_cnt, Xdc_trn, ydc = shuffle(usXdc_cnt, usXdc_trn, usydc)
+        dc_loss = dc_train_step(Xdc_cnt, Xdc_trn, ydc)
+        #dc_loss2 = dc_train_step(X_cnt, X_fake_trn, ydc_fake)
         #train GAN model
         gan_total_loss, gan_dss_loss, gan_dsc_loss, gen_loss = gan_train_step(X_cnt, X_stl, X_fake_trn, ydc_real, yds_real)
-        print(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss1 + ds_loss2} \n content descriminator total loss : {dc_loss1 + dc_loss2} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
+
+        logger.info(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
+        # if (i+1) % (batch_per_epoch*log_interval) == 0:
+        #     plotlosses.update({
+        #         'dss_loss' : ds_loss,
+        #         'dsc_loss' : dc_loss,
+        #         'total_loss' : gan_total_loss,
+        #         'gen_loss' : gen_loss,
+        #         'gans_loss' : gan_dss_loss,
+        #         'ganc_loss' : gan_dsc_loss
+        #     })
+        #     plotlosses.send()
         plotlosses.update({
-            'dss_loss' : ds_loss1 + ds_loss2,
-            'dsc_loss' : dc_loss1 + dc_loss2,
-            'total_loss' : gan_total_loss,
-            'gen_loss' : gen_loss,
-            'gans_loss' : gan_dss_loss,
-            'ganc_loss' : gan_dsc_loss
-        })
+                'dss_loss' : ds_loss,
+                'dsc_loss' : dc_loss,
+                'total_loss' : gan_total_loss,
+                'gen_loss' : gen_loss,
+                'gans_loss' : gan_dss_loss,
+                'ganc_loss' : gan_dsc_loss
+            })
         plotlosses.send()
-        if (i+1) % batch_per_epoch == 0:
+        if (i+1) % (batch_per_epoch*save_interval) == 0:
             summarize_performance(i, g_model, dataset)
 
 
 #%%
 
 dataset = load_pixel_metrics(config.GAN_DATASET_DIR)
-train(g_model, dataset)
+train(g_model, dataset, config.GAN_EPOCHS, config.GAN_BATCH_SIZE)
 
 
 # %%
