@@ -17,7 +17,8 @@ from sklearn.utils import shuffle
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, ReLU, LeakyReLU, Concatenate
+from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, ReLU, LeakyReLU, Concatenate, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
+from tensorflow.keras.initializers import HeUniform
 from tensorflow.keras import losses
 from tensorflow.keras import metrics 
 from tensorflow.keras.callbacks import TensorBoard
@@ -27,9 +28,7 @@ from tensorflow.python.autograph.pyct import transformer
 from livelossplot import PlotLosses
 from livelossplot.outputs import MatplotlibPlot
 import config
-
 #%%
-
 # set logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -39,10 +38,8 @@ logger.setLevel(logging.INFO)
 logdir = config.LOG_DIR+ "/gan_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1)
 
-
-# %%
 def define_encoder_block(layer_in, n_filters, batchnorm=True):
-    init = RandomNormal(stddev=0.02)
+    init = HeUniform()
     g = Conv2D(n_filters, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(layer_in)
     if batchnorm:
         g =  BatchNormalization()(g, training=True)
@@ -134,17 +131,19 @@ def define_style_descriminator(image_size=(128, 128, 3)):
     d = Conv2D(64, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(input_img)
     d = LeakyReLU(alpha=0.2)(d)
 	# C128
-    d = Conv2D(128, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(128, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
+    d = AveragePooling2D()(d)
 	# C256
-    d = Conv2D(256, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+    d = Conv2D(256, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
     d = BatchNormalization()(d)
     d = LeakyReLU(alpha=0.2)(d)
+    d = AveragePooling2D()(d)
     # flatten
-    flt = Flatten()(d)
+    flt = GlobalMaxPooling2D()(d)
     # linear logits layer
-    output = Dense(1)(flt)
+    output = Dense(1, activation='tanh')(flt)
     #build and compile the model
     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
     return model
@@ -183,7 +182,7 @@ def pairWiseRankingLoss(y_ref, y_style, label):
     u  = tf.cast(tf.broadcast_to(0, shape=y_ref.shape), dtype=tf.float32)
     i  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
     y = tf.cast(label[..., tf.newaxis], dtype=tf.float32)
-    dist = tf.norm(y_ref-y_style, ord='euclidean', axis=-1, keepdims=True)
+    dist = tf.norm(y_ref-y_style, ord=1, axis=-1, keepdims=True)
     loss = y*dist + (i-y)*tf.reduce_max(tf.stack([u,m-dist]), axis=0)
     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
 
@@ -196,18 +195,18 @@ def ganLoss(dss_loss, dsc_loss, gen_loss):
     return tot_loss
 
 dscLoss = tf.keras.losses.BinaryCrossentropy()
-cntLoss = tf.keras.losses.MeanSquaredError()
+cntLoss = tf.keras.losses.MeanAbsoluteError()
 
-gan_opt = tf.keras.optimizers.Adamax(lr=0.002)
+gan_opt = tf.keras.optimizers.Adam(lr=0.002)
 
 
 @tf.function
-def gan_train_step(ref_in, style_in, trans_in,cnt_true, style_true):
+def gan_train_step(ref_in, style_in, trans_in, cnt_true, style_true):
     with tf.GradientTape() as tape:
         gen_out, dss_out, dst_out, cnt_out = gan_model([ref_in, style_in])
         dss_loss = pairWiseRankingLoss(dss_out, dst_out, style_true)
         dsc_loss = tf.cast(dscLoss(cnt_true, cnt_out), dtype=tf.float32)
-        gen_loss = tf.cast(cntLoss(trans_in, gen_out), dtype=tf.float32)
+        gen_loss = tf.cast(tf.math.abs(cntLoss(trans_in, gen_out)), dtype=tf.float32)
         total_loss = ganLoss(dss_loss, dsc_loss, gen_loss)
         
     #total_loss = add(add(multiply(gan_beta, dss_loss), multiply(subtract(one, gan_beta), dsc_loss)), multiply(subtract(one, gan_alpha), gen_loss))    
@@ -276,18 +275,23 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
     #rescale pixels values
     X_cnt = (X_cnt+1)/2.0
     X_stl = (X_stl+1)/2.0
+    X_trn = (X_trn+1)/2.0
     X_fake = (X_fake+1)/2.0
     # plot samples
     for i in range(n_samples):
-        pyplot.subplot(3, n_samples, 1 + i)
+        pyplot.subplot(4, n_samples, 1 + i)
         pyplot.axis('off')
         pyplot.imshow(X_cnt[i])
     for i in range(n_samples):
-        pyplot.subplot(3, n_samples, 1 + n_samples + i)
+        pyplot.subplot(4, n_samples, 1 + n_samples + i)
         pyplot.axis('off')
         pyplot.imshow(X_stl[i])
     for i in range(n_samples):
-        pyplot.subplot(3, n_samples, 1 + 2*n_samples + i)
+        pyplot.subplot(4, n_samples, 1 + 2*n_samples + i)
+        pyplot.axis('off')
+        pyplot.imshow(X_trn[i])
+    for i in range(n_samples):
+        pyplot.subplot(4, n_samples, 1 + 3*n_samples + i)
         pyplot.axis('off')
         pyplot.imshow(X_fake[i])
     # save result image 
@@ -302,7 +306,7 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
 
 def train(g_model, dataset, n_epoch=100, batch_size=16):
     n_patch = dc_model.output_shape[1]
-    batch_per_epoch = (dataset[1].shape[0]*dataset[1].shape[1])//batch_size
+    batch_per_epoch = (dataset[1].shape[0]*(dataset[1].shape[1]//2))//batch_size
     n_steps = n_epoch*batch_per_epoch
     plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'dss model' : ['dss_loss'], 'dsc model' : ['dsc_loss'], 'gan model' : ['total_loss', 'gen_loss', 'gans_loss', 'ganc_loss']})
 
@@ -351,6 +355,9 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
         plotlosses.send()
         if (i+1) % (batch_per_epoch*save_interval) == 0:
             summarize_performance(i, g_model, dataset)
+        if i == 200:
+            summarize_performance(i, g_model, dataset)
+            break
 
 
 #%%
