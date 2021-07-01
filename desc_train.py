@@ -13,8 +13,6 @@ import random
 import tensorflow as tf  
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D
 from tensorflow.keras import losses
 from tensorflow.keras import metrics 
 from tensorflow.keras.callbacks import TensorBoard
@@ -105,8 +103,7 @@ def train_step(ref_in, style_in, label_in):
 
 @tf.function
 def val_step(ref_in, style_in, label_in):
-    ref_out = desc_pre_model(ref_in)
-    style_out = desc_pre_model(style_in)
+    ref_out, style_out = desc_pre_model([ref_in, style_in])
     #val_metrics.update_state(ref_out, style_out, label_in)
 
 def train(epochs=3):
@@ -131,8 +128,8 @@ def train(epochs=3):
         
         # train_acc = train_metrics.result()
         # print(f" Epoch [{epoch}] : relative accuracy : {train_acc[0]}, ranking loss : {train_acc[1]}")
-        # # plotlosses.update({'ranking_loss' : train_acc[1], 'relative_accuracy' : train_acc[0]})
-        # # plotlosses.send()
+        plotlosses.update({'ranking_loss' : loss_value})
+        plotlosses.send()
         # # # Reset training metrics at the end of each epoch
         # train_metrics.reset_states()
 

@@ -3,7 +3,8 @@
 
 import config
 from src.model.desc_model import define_style_descrminator, StyleNet
-from src.model.gan_model import define_cnt_descriminator, define_gan, defing_generator
+#from src.model.gan_model import define_cnt_descriminator, define_gan, defing_generator
+from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
 
 import os 
 import logging
@@ -18,13 +19,7 @@ from numpy.random import randint
 from sklearn.utils import shuffle
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, ReLU, LeakyReLU, Concatenate, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
-from tensorflow.keras.initializers import HeUniform
-from tensorflow.keras import losses
-from tensorflow.keras import metrics 
 from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.math import multiply, add, subtract
 from matplotlib import pyplot
 from tensorflow.python.autograph.pyct import transformer
 from livelossplot import PlotLosses
@@ -206,29 +201,29 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
         #         'ganc_loss' : gan_dsc_loss
         #     })
         #     plotlosses.send()
-        plotlosses.update({
-                'dss_loss' : ds_loss,
-                'dsc_loss' : dc_loss,
-                'total_loss' : gan_total_loss,
-                'gen_loss' : gen_loss,
-                'gans_loss' : gan_dss_loss,
-                'ganc_loss' : gan_dsc_loss
-            })
-        plotlosses.send()
+        if i % 10 == 0: 
+            plotlosses.update({
+                    'dss_loss' : ds_loss,
+                    'dsc_loss' : dc_loss,
+                    'total_loss' : gan_total_loss,
+                    'gen_loss' : gen_loss,
+                    'gans_loss' : gan_dss_loss,
+                    'ganc_loss' : gan_dsc_loss
+                })
+            plotlosses.send()
         if (i+1) % (batch_per_epoch*save_interval) == 0:
             summarize_performance(i, g_model, dataset)
-        if i == 200:
+        if i % 100 == 0:
             summarize_performance(i, g_model, dataset)
-            break
+            if i == config.GAN_BP:
+                break
 
-
-#%%
 
 if __name__ == "__main__":
     #load dataset
     dataset = load_pixel_metrics(config.GAN_DATASET_DIR)
     #init models
-    g_model = defing_generator(config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
+    g_model = define_generator(config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
     dc_model = define_cnt_descriminator()
     ds_base_model = define_style_descrminator(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
     ds_model = StyleNet(ds_base_model)
@@ -238,3 +233,5 @@ if __name__ == "__main__":
     train(g_model, dataset, config.GAN_EPOCHS, config.GAN_BATCH_SIZE)
 
 
+
+# %%
