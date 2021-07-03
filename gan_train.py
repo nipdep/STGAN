@@ -3,8 +3,8 @@
 
 import config
 from src.model.desc_model import define_style_descrminator, StyleNet
-#from src.model.gan_model import define_cnt_descriminator, define_gan, defing_generator
-from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
+from src.model.gan_model import define_cnt_descriminator, define_gan, define_generator
+#from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
 
 import os 
 import logging
@@ -36,12 +36,12 @@ logdir = config.LOG_DIR+ "/gan_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1)
 
 def pairWiseRankingLoss(y_ref, y_style, label):
-    m  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
-    u  = tf.cast(tf.broadcast_to(0, shape=y_ref.shape), dtype=tf.float32)
-    i  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
-    y = tf.cast(label[..., tf.newaxis], dtype=tf.float32)
-    dist = tf.norm(y_ref-y_style, ord=1, axis=-1, keepdims=True)
-    loss = y*dist + (i-y)*tf.reduce_max(tf.stack([u,m-dist]), axis=0)
+    m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    y = tf.cast(label, dtype=tf.float32)
+    dist = tf.math.abs(tf.keras.losses.cosine_similarity(y_ref,y_style))
+    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
 
 def ganLoss(dss_loss, dsc_loss, gen_loss):
@@ -55,49 +55,42 @@ def ganLoss(dss_loss, dsc_loss, gen_loss):
 dscLoss = tf.keras.losses.BinaryCrossentropy()
 cntLoss = tf.keras.losses.MeanAbsoluteError()
 
-gan_opt = tf.keras.optimizers.Adam(lr=0.002)
-
-
-@tf.function
-def gan_train_step(ref_in, style_in, trans_in, cnt_true, style_true):
-    with tf.GradientTape() as tape:
-        gen_out, dss_out, dst_out, cnt_out = gan_model([ref_in, style_in])
-        dss_loss = pairWiseRankingLoss(dss_out, dst_out, style_true)
-        dsc_loss = tf.cast(dscLoss(cnt_true, cnt_out), dtype=tf.float32)
-        gen_loss = tf.cast(tf.math.abs(cntLoss(trans_in, gen_out)), dtype=tf.float32)
-        total_loss = ganLoss(dss_loss, dsc_loss, gen_loss)
-        
-    #total_loss = add(add(multiply(gan_beta, dss_loss), multiply(subtract(one, gan_beta), dsc_loss)), multiply(subtract(one, gan_alpha), gen_loss))    
-    #total_loss =  gan_alpha*(gan_beta*dss_loss+(one-gan_beta)*dsc_loss)+(one-gan_alpha)*gen_loss
-    grads = tape.gradient(total_loss, gan_model.trainable_weights)
-    gan_opt.apply_gradients(zip(grads, gan_model.trainable_weights))
-    return total_loss, dss_loss, dsc_loss, gen_loss
-
+gen_opt = tf.keras.optimizers.Adam(lr=0.002)
 ds_opt = tf.keras.optimizers.Adam(lr=0.02)
-
-@tf.function
-def ds_train_step(style_in, trans_in, label_in):
-    with tf.GradientTape() as tape:
-        ref_out, trans_out = ds_model([style_in, trans_in])
-        loss = pairWiseRankingLoss(ref_out, trans_out, label_in)
-    grads = tape.gradient(loss, ds_model.trainable_weights)
-    ds_opt.apply_gradients(zip(grads, ds_model.trainable_weights))
-    #train_metrics.update_state(ref_out, style_out, label_in)
-    return loss
-
-
 dc_opt = tf.keras.optimizers.Adam(lr=0.02)
 
-@tf.function
-def dc_train_step(cnt_in, trans_in, label_in):
-    with tf.GradientTape() as tape:
-        logits = dc_model([cnt_in, trans_in])
-        loss = cntLoss(label_in, logits)
-    grads = tape.gradient(loss, dc_model.trainable_weights)
-    dc_opt.apply_gradients(zip(grads, dc_model.trainable_weights))
-    #train_metrics.update_state(ref_out, style_out, label_in)
-    return loss
+def add_cnt_loss(dis_loss, gen_loss):
+    return dis_loss + config.LAMBDAC*gen_loss
 
+def add_style_loss(dis_loss, gen_loss):
+    return dis_loss + config.LAMBDAS*gen_loss
+
+@tf.function
+def train_step(cnt_in, style_in, trans_in, cnt_fake, style_fake, Xds_stl, Xds_trn, yds, Xdc_cnt, Xdc_trn, ydc):
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as discs_tape, tf.GradientTape() as discc_tape:
+        gen_out, dss_out, dst_out, cnt_out = gan_model([cnt_in, style_in])
+        dss_loss = pairWiseRankingLoss(dss_out, dst_out, style_fake)
+        dsc_loss = dscLoss(cnt_fake, cnt_out)
+        gen_loss = tf.cast(tf.math.abs(cntLoss(trans_in, gen_out)), dtype=tf.float32)
+
+        ref_out, trans_out = ds_model([Xds_stl, Xds_trn])
+        ds_loss = pairWiseRankingLoss(ref_out, trans_out, yds)
+
+        logits = dc_model([Xdc_cnt, Xdc_trn])
+        dc_loss = dscLoss(ydc, logits)
+
+        total_style_loss = add_style_loss(ds_loss, dss_loss)
+        total_cnt_loss = add_cnt_loss(dc_loss, dsc_loss)
+        total_gen_loss = ganLoss(dss_loss, dsc_loss, gen_loss)
+
+    generator_grads = gen_tape.gradient(gen_loss, g_model.trainable_variables)
+    cnt_disc_grads = discc_tape.gradient(total_cnt_loss, dc_model.trainable_variables)
+    style_disc_grads = discs_tape.gradient(total_style_loss, ds_base_model.trainable_variables)
+
+    gen_opt.apply_gradients(zip(generator_grads, g_model.trainable_variables))
+    dc_opt.apply_gradients(zip(cnt_disc_grads, dc_model.trainable_variables))
+    ds_opt.apply_gradients(zip(style_disc_grads,  ds_base_model.trainable_variables))
+    return gen_loss, total_cnt_loss, total_style_loss
 
 def load_pixel_metrics(filename):
     full_mat = np.load(filename)
@@ -165,7 +158,7 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
     n_patch = dc_model.output_shape[1]
     batch_per_epoch = (dataset[1].shape[0]*(dataset[1].shape[1]//2))//batch_size
     n_steps = n_epoch*batch_per_epoch
-    plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'dss model' : ['dss_loss'], 'dsc model' : ['dsc_loss'], 'gan model' : ['total_loss', 'gen_loss', 'gans_loss', 'ganc_loss']})
+    plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'dss model' : ['dss_loss'], 'dsc model' : ['dsc_loss'], 'gan model' : ['gen_loss']})
 
     save_interval = 10
     log_interval = 1
@@ -178,37 +171,22 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
         usXds_trn = np.concatenate((X_trn, X_fake_trn))
         usysd = np.concatenate((yds_real, yds_fake))
         Xds_stl, Xds_trn, yds = shuffle(usXds_stl, usXds_trn, usysd)
-        ds_loss = ds_train_step(Xds_stl, Xds_trn, yds)
-        #ds_loss2 = ds_train_step(X_stl, X_fake_trn, yds_fake)
         #train content descriminator
         usXdc_cnt = np.concatenate((X_cnt, X_cnt))
         usXdc_trn = np.concatenate((X_trn, X_fake_trn))
         usydc = np.concatenate((ydc_real, ydc_fake))
         Xdc_cnt, Xdc_trn, ydc = shuffle(usXdc_cnt, usXdc_trn, usydc)
-        dc_loss = dc_train_step(Xdc_cnt, Xdc_trn, ydc)
-        #dc_loss2 = dc_train_step(X_cnt, X_fake_trn, ydc_fake)
-        #train GAN model
-        gan_total_loss, gan_dss_loss, gan_dsc_loss, gen_loss = gan_train_step(X_cnt, X_stl, X_trn, ydc_real, yds_real)
 
-        logger.info(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
-        # if (i+1) % (batch_per_epoch*log_interval) == 0:
-        #     plotlosses.update({
-        #         'dss_loss' : ds_loss,
-        #         'dsc_loss' : dc_loss,
-        #         'total_loss' : gan_total_loss,
-        #         'gen_loss' : gen_loss,
-        #         'gans_loss' : gan_dss_loss,
-        #         'ganc_loss' : gan_dsc_loss
-        #     })
-        #     plotlosses.send()
+        #train GAN model
+        gen_loss, dc_loss, ds_loss = train_step(X_cnt, X_stl, X_trn, ydc_fake, yds_fake, Xds_stl, Xds_trn, yds, Xdc_cnt, Xdc_trn, ydc)
+    
+
+        #logger.info(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
         if i % 10 == 0: 
             plotlosses.update({
                     'dss_loss' : ds_loss,
                     'dsc_loss' : dc_loss,
-                    'total_loss' : gan_total_loss,
                     'gen_loss' : gen_loss,
-                    'gans_loss' : gan_dss_loss,
-                    'ganc_loss' : gan_dsc_loss
                 })
             plotlosses.send()
         if (i+1) % (batch_per_epoch*save_interval) == 0:
