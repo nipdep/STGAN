@@ -9,6 +9,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D, Lambda, Reshape, Add
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
+from tensorflow.python.keras.layers.pooling import GlobalAveragePooling2D
 import config 
 #%%
 # batch operation usng tensor slice
@@ -147,14 +148,12 @@ def define_decoder_block(layer_in, skip_in, n_filters, dropout=True):
     g = BatchNormalization()(g, training=True)
     if dropout:
         g = Dropout(0.4)(g, training=True)
+    #skip_in = tf.math.l2_normalize(skip_in)
     g = Concatenate()([g, skip_in])
     g = ReLU()(g)
     return g
 
-def define_generator(latent_size, image_shape=(128, 128, 3)):
-    # init layers
-    init = RandomNormal(stddev=0.02)
-    content_image = Input(shape=image_shape, name='content_image')
+def define_mlt_desc_model(latent_size, image_shape):
     style_image = Input(shape=image_shape, name='style_image')
     # wavelet transform style_image
     wavelet = Lambda(Wavelet, Wavelet_out_shape, name='wavelet')
@@ -201,7 +200,7 @@ def define_generator(latent_size, image_shape=(128, 128, 3)):
     # concate level two and level three decomposition 
     concate_level_3 = Concatenate()([relu_2_2, relu_b_2])
     conv_3 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_3')(concate_level_3)
-    norm_3 = BatchNormalization(name='nomr_3')(conv_3)
+    norm_3 = BatchNormalization(name='norm_3')(conv_3)
     relu_3 = Activation('relu', name='relu_3')(norm_3)
 
     conv_3_2 = Conv2D(256, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_3_2')(relu_3)
@@ -231,12 +230,55 @@ def define_generator(latent_size, image_shape=(128, 128, 3)):
     norm_4_2 = BatchNormalization(name='norm_4_2')(conv_4_2)
     relu_4_2 = Activation('relu', name='relu_4_2')(norm_4_2)
 
-    conv_5_1 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_5_1')(relu_4_2)
+    conv_5_1 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_5_1')(relu_4_2)
     norm_5_1 = BatchNormalization(name='norm_5_1')(conv_5_1)
     relu_5_1 = Activation('relu', name='relu_5_1')(norm_5_1)
 
-    #pool_5_1 = AveragePooling2D(pool_size=(7, 7), strides=1, padding='same', name='avg_pool_5_1')(relu_5_1)
+    conv_5_2 = Conv2D(latent_size, kernel_size=(3, 3), padding='same', name='conv_5_2')(relu_5_1)
+    norm_5_2 = BatchNormalization(name='norm_5_2')(conv_5_2)
+    relu_5_2 = Activation('relu', name='relu_5_2')(norm_5_2)
 
+    logits = GlobalMaxPool2D(name='logits')(relu_5_2)
+    model = Model(inputs=style_image, outputs=[logits, relu_5_1, relu_4, relu_3, relu_2, relu_1])
+    return model
+
+dss_model = define_mlt_desc_model(64, (128, 128, 3))
+# tf.keras.utils.plot_model(dss_model, show_shapes=True)
+
+class StyleNet(tf.keras.Model):
+
+    def __init__(self, base_model):
+        super(StyleNet, self).__init__()
+        self._model = base_model 
+
+    @tf.function
+    def call(self, inputs):
+        ref_img, trans_img = inputs
+        with tf.name_scope("Style") as scope:
+            ft1  = self._model(ref_img)[0]
+            ft1 = tf.math.l2_normalize(ft1, axis=-1)
+        with tf.name_scope("Transfer") as scope:
+            ft2 = self._model(trans_img)[0]
+            ft2 = tf.math.l2_normalize(ft2, axis=-1)
+        return [ft1, ft2]
+    
+    @tf.function
+    def get_features(self, inputs):
+        return tf.math.l2_normalize(self._model(inputs), axis=-1)
+    
+    def get_base_model(self):
+        return self._model
+
+# ds_model = StyleNet(dss_model)
+# tf.keras.utils.plot_model(ds_model, show_shapes=True)
+#%%
+def define_generator(style_header, latent_size, image_shape=(128, 128, 3)):
+    # init layers
+    init = RandomNormal(stddev=0.02)
+    content_image = Input(shape=image_shape, name='content_image')
+    style_image = Input(shape=image_shape, name='style_image')
+    # wavelet transform style_image
+    _, relu_5_1, relu_4, relu_3, relu_2, relu_1 = style_header(style_image)
     ## cnn base autoencoder block
     #encoder model
     cnt_gen_base_model = tf.keras.applications.VGG16(include_top=False, input_shape=image_shape, input_tensor=content_image)
@@ -261,12 +303,11 @@ def define_generator(latent_size, image_shape=(128, 128, 3)):
     #ouutput layer
     g = Conv2DTranspose(3, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(d7)
     out_image = Activation('tanh')(g)
-    sty_model = Model(inputs=style_image, outputs=relu_5_1)
     model = Model(inputs=[content_image, style_image], outputs=out_image, name='generator')
-    return model, sty_model
+    return model
 
-# g_model = define_generator(config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
-# tf.keras.utils.plot_model(g_model, show_shapes=True)
+g_model = define_generator(dss_model, config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
+tf.keras.utils.plot_model(g_model, show_shapes=True)
 #%%
 
 def vgg_cnt_gen_model(image_shape):
@@ -301,8 +342,8 @@ def define_cnt_descriminator(image_shape=(128, 128, 3)):
 
 
 
-dc_model = define_cnt_descriminator()
-tf.keras.utils.plot_model(dc_model, show_shapes=True)
+# dc_model = define_cnt_descriminator()
+# tf.keras.utils.plot_model(dc_model, show_shapes=True)
 #%%
 
 #ds_base_model = define_style_descrminator(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
@@ -315,10 +356,7 @@ def define_gan(g_model, dc_model, ds_model, image_shape=(128, 128, 3)):
     for layer in dc_model.layers:
         if not isinstance(layer, BatchNormalization):
             layer.trainable = False
-    
-    for layer in ds_model.layers:
-        if not isinstance(layer, BatchNormalization):
-            layer.trainable = False
+
     # input layer for GAN model
     cnt_img = Input(shape=image_shape)
     style_img = Input(shape=image_shape)
@@ -331,5 +369,7 @@ def define_gan(g_model, dc_model, ds_model, image_shape=(128, 128, 3)):
     model = Model(inputs=[cnt_img, style_img], outputs=[gen_out,  dss_out, dst_out, cnt_out])
     return model
 
-#gan_model = define_gan(g_model, dc_model, ds_model)
-#tf.keras.utils.plot_model(gan_model, show_shapes=True)
+# gan_model = define_gan(g_model, dc_model, ds_model)
+# tf.keras.utils.plot_model(gan_model, show_shapes=True)
+
+# %%
