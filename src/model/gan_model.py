@@ -25,7 +25,7 @@ def define_decoder_block(layer_in, skip_in, n_filters, dropout=True):
     g = ReLU()(g)
     return g
 
-def defing_generator(latent_size, image_shape=(128, 128, 3)):
+def define_generator(latent_size, image_shape=(128, 128, 3)):
     init = RandomNormal(stddev=0.02)
     content_image = Input(shape=image_shape)
     style_image = Input(shape=image_shape)
@@ -72,15 +72,15 @@ def define_cnt_descriminator(image_shape=(128, 128, 3)):
     d = LeakyReLU(alpha=0.2)(d)
     # c128
     d = Conv2D(128, (4, 4), strides=(2,2), padding='same', kernel_initializer=init)(d)
-    d = BatchNormalization()(d)
+    d = BatchNormalization()(d, training=True)
     d = LeakyReLU(alpha=0.2)(d)
     # c256
     d = Conv2D(256, (4, 4), strides=(2,2), padding='same', kernel_initializer=init)(d)
-    d = BatchNormalization()(d)
+    d = BatchNormalization()(d, training=True)
     d = LeakyReLU(alpha=0.2)(d)
     # c512
     d = Conv2D(512, (4, 4), strides=(2,2), padding='same', kernel_initializer=init)(d)
-    d = BatchNormalization()(d)
+    d = BatchNormalization()(d, training=True)
     d = LeakyReLU(alpha=0.2)(d)
     # patch output
     d = Conv2D(1, (4, 4), strides=(2,2), padding='same', kernel_initializer=init)(d)
@@ -88,6 +88,8 @@ def define_cnt_descriminator(image_shape=(128, 128, 3)):
     #define model
     model = Model(inputs=[in_cnt_image, in_tr_image], outputs=patch_out, name='content_descriminator')
     return model
+
+
 
 #dc_model = define_cnt_descriminator()
 #tf.keras.utils.plot_model(dc_model, show_shapes=True)
@@ -112,6 +114,7 @@ def define_gan(g_model, dc_model, ds_model, image_shape=(128, 128, 3)):
     # generator model
     gen_out = g_model([cnt_img, style_img])
     # style descriminator model
+    
     dss_out, dst_out = ds_model([style_img, gen_out])
     # content descriminator model
     cnt_out = dc_model([cnt_img, gen_out])
