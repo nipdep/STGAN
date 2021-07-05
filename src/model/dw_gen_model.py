@@ -2,7 +2,9 @@
 ## generator and descriminator content headers are imposed by VGG-16 model with input of (128, 128, 3)
 #%%
 import tensorflow as tf  
+import tensorflow_addons as tfa
 import tensorflow.keras.backend as K
+from tensorflow_addons.layers import InstanceNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal, HeUniform
 from tensorflow.keras.models import Model
@@ -256,10 +258,10 @@ class StyleNet(tf.keras.Model):
         ref_img, trans_img = inputs
         with tf.name_scope("Style") as scope:
             ft1  = self._model(ref_img)[0]
-            ft1 = tf.math.l2_normalize(ft1, axis=-1)
+            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
         with tf.name_scope("Transfer") as scope:
             ft2 = self._model(trans_img)[0]
-            ft2 = tf.math.l2_normalize(ft2, axis=-1)
+            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
         return [ft1, ft2]
     
     @tf.function
@@ -296,8 +298,8 @@ def define_generator(style_header, latent_size, image_shape=(128, 128, 3)):
     d2 = ReLU()(g)
     #d2 = define_decoder_block(b, e6, 512)
     d3 = define_decoder_block(d2, relu_5_1, 512)
-    d4 = define_decoder_block(d3, relu_4 , 512, dropout=False)
-    d5 = define_decoder_block(d4, relu_3, 256, dropout=False)
+    d4 = define_decoder_block(d3, relu_4 , 512, dropout=True)
+    d5 = define_decoder_block(d4, relu_3, 256, dropout=True)
     d6 = define_decoder_block(d5, relu_2, 128, dropout=False)
     d7 = define_decoder_block(d6, relu_1, 64, dropout=False)
     #ouutput layer
@@ -366,7 +368,7 @@ def define_gan(g_model, dc_model, ds_model, image_shape=(128, 128, 3)):
     dss_out, dst_out = ds_model([style_img, gen_out])
     # content descriminator model
     cnt_out = dc_model([cnt_img, gen_out])
-    model = Model(inputs=[cnt_img, style_img], outputs=[gen_out,  dss_out, dst_out, cnt_out])
+    model = Model(inputs=[cnt_img, style_img], outputs=[gen_out, dss_out, dst_out, cnt_out])
     return model
 
 # gan_model = define_gan(g_model, dc_model, ds_model)
