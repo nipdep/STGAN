@@ -66,15 +66,14 @@ def process_path(file_path):
 
     return cur_img, rand_img, label
 
-
 def pairWiseRankingLoss(y_ref, y_style, label):
-    m  = tf.cast(tf.broadcast_to(config.DESC_ALPHA, shape=y_ref.shape), dtype=tf.float32)
-    u  = tf.cast(tf.broadcast_to(0, shape=y_ref.shape), dtype=tf.float32)
-    i  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
-    y = tf.cast(label[..., tf.newaxis], dtype=tf.float32)
-    dist = tf.norm(y_ref-y_style, ord='euclidean', axis=-1, keepdims=True)
-    loss = y*dist + (i-y)*tf.reduce_max(tf.stack([u,m-dist]), axis=0)
-    return tf.reduce_mean(loss)
+    m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+    y = tf.cast(label, dtype=tf.float32)
+    dist = tf.math.abs(tf.keras.losses.cosine_similarity(y_ref,y_style))
+    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
+    return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
 
 
 class RankingMetrics(tf.keras.metrics.Metric):
@@ -142,8 +141,6 @@ def train(epochs=3):
         # print("Validation acc: %.4f" % (float(val_acc),))
         print("Time taken: %.2fs" % (time.time() - start_time))
 
-# tf.profiler.experimental.client.trace('grpc://localhost:6009',
-#                                       config.LOG_DIR+'/profilers', 2000)
 
 if __name__ == "__main__":
     #data importing
@@ -171,5 +168,8 @@ if __name__ == "__main__":
     desc_pre_model = StyleNet(base_model)
 
     train(epochs)
+    # tf.profiler.experimental.client.trace('grpc://localhost:6009',
+    #                                   config.LOG_DIR+'/profilers', 2000)
+
 
 # %%
