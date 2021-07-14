@@ -34,6 +34,7 @@ logger.setLevel(logging.INFO)
 #tensorboard logger
 logdir = config.LOG_DIR+ "/gan_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1)
+run_opts = tf.compat.v1.RunOptions(report_tensor_allocations_upon_oom = True)
 
 def pairWiseRankingLoss(y_ref, y_style, label):
     m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
@@ -43,6 +44,17 @@ def pairWiseRankingLoss(y_ref, y_style, label):
     dist = tf.math.abs(tf.keras.losses.cosine_similarity(y_ref,y_style))
     loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
+
+def mixLoss(ref_img, gen_img):
+    one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
+    two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
+    rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
+    rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
+    l1_loss = tf.norm(ref_img-gen_img, ord=1, axis=0)/ref_img.shape[0]
+    ms_ssim_loss = tf.reduce_mean(tf.image.ssim_multiscale(rescaled_ref_img, rescaled_gen_img, max_val=1, filter_size=3))
+    alpha = tf.cast(config.GEN_LOSS_ALPHA, dtype=tf.float32)
+    total_loss = alpha*ms_ssim_loss + (1-alpha)*l1_loss
+    return tf.cast(total_loss, dtype=tf.float32)
 
 def ganLoss(dss_loss, dsc_loss, gen_loss):
     gan_alpha = config.GAN_ALPHA
@@ -82,8 +94,9 @@ def train_step(cnt_in, style_in, trans_in, cnt_fake, style_fake, Xds_stl, Xds_tr
         total_style_loss = add_style_loss(ds_loss, dss_loss)
         total_cnt_loss = add_cnt_loss(dc_loss, dsc_loss)
         total_gen_loss = ganLoss(dss_loss, dsc_loss, gen_loss)
+        #total_gen_loss = mixLoss(trans_in, gen_out)
 
-    generator_grads = gen_tape.gradient(gen_loss, g_model.trainable_variables)
+    generator_grads = gen_tape.gradient(total_gen_loss, g_model.trainable_variables)
     cnt_disc_grads = discc_tape.gradient(total_cnt_loss, dc_model.trainable_variables)
     style_disc_grads = discs_tape.gradient(total_style_loss, ds_base_model.trainable_variables)
 
