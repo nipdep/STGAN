@@ -278,12 +278,66 @@ def define_desc_encoder(latent_size, image_shape=(128, 128, 3)):
     norm_5_2 = InstanceNormalization(name='norm_5_2')(conv_5_2)
     relu_5_2 = Activation('relu', name='relu_5_2')(norm_5_2)
 
-    logits = GlobalMaxPool2D(name='logits')(relu_5_2)
+    pool = GlobalMaxPool2D(name='pool_logits')(relu_5_2)
+    logits = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='l2_norm')(pool)
     model = Model(inputs=style_image, outputs=logits)
     return model
+#%%
+# def define_stl_encoder(latent_size, image_shape=(128, 128, 3)):
+#     #content image input
+#     img_in = Input(shape=image_shape, name='Stl_Input')
+#     # c64
+#     d = Conv2D(64, (5, 5), strides=(2,2), padding='same', name='StlEnc1_Conv')(img_in)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc1_relu')(d)
+#     # c128
+#     d = Conv2D(128, (5, 5), strides=(2,2), padding='same', name='StlEnc2_Conv')(d)
+#     d = BatchNormalization(name='StlEnc2_norm')(d, training=True)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc2_relu')(d)
+#     # c256
+#     d = Conv2D(256, (3, 3), strides=(2,2), padding='same', name='StlEnc3_Conv')(d)
+#     d = BatchNormalization(name='StlEnc3_norm')(d, training=True)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc3_relu')(d)
+#     # c512
+#     d = Conv2D(512, (3, 3), strides=(2,2), padding='same', name='StlEnc4_Conv')(d)
+#     d = BatchNormalization(name='StlEnc4_norm')(d, training=True)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc4_relu')(d)
+#     # c512
+#     d = Conv2D(512, (3, 3), strides=(2,2), padding='same', name='StlEnc5_Conv')(d)
+#     d = BatchNormalization(name='StlEnc5_norm')(d, training=True)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc5_relu')(d)
+#     # c-latent size
+#     d = Conv2D(latent_size, (3, 3), strides=(2,2), padding='same', name='StlEnc6_Conv')(d)
+#     d = BatchNormalization(name='StlEnc6_norm')(d, training=True)
+#     d = LeakyReLU(alpha=0.2, name='StlEnc6_relu')(d)
+#     #output
+#     pool = GlobalMaxPool2D(name='output')(d)
+#     output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='l2_norm')(pool)
+#     #define model
+#     model = Model(inputs=img_in, outputs=output, name='style_base_encoder')
+#     return model
 
+#%%
 
+def define_stl_encoder(latent_size, image_shape):
+    feat_model = tf.keras.applications.ResNet101V2(include_top=False, input_shape=image_shape)
+    t = False
+    for layer in feat_model.layers:
+        if layer.name == "conv5_block3_1_conv":
+            t = True
+        layer.trainable = t
+    x = feat_model.output
+    x = GlobalAveragePooling2D(name='pool')(x)
+    x = Dropout(0.3, name='dropout')(x)
+    output = Dense(latent_size, activation='relu')(x)
+    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='StlL2_norm')(output)
 
+    model = Model(inputs=feat_model.input, outputs=output, name='style_base_encoder')
+    return model
+#%%
+# gen_model = define_stl_encoder(32, (128, 128, 3))
+# gen_model.summary()
+#tf.keras.utils.plot_model(gen_model, show_shapes=True)
+#%%
 class StyleNet(tf.keras.Model):
 
     def __init__(self, base_model):
@@ -305,39 +359,32 @@ class StyleNet(tf.keras.Model):
     def get_features(self, inputs):
         return tf.math.l2_normalize(self._model(inputs), axis=-1)
 
-gs_model = define_desc_encoder(64)
+# gs_model = define_desc_encoder(64)
 # CntNet = StyleNet(gs_model)
 # tf.keras.utils.plot_model(gs_model, show_shapes=True)
 
 #base_model = define_style_descrminator(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
-#%%
-class RankingMetrics(tf.keras.metrics.Metric):
-
-    def __init__(self, name='pairwise_ranking_loss', **kwargs):
-        super(RankingMetrics, self).__init__(name=name, **kwargs)
-        
-        self.relative_acc = self.add_weight(name='rel_acc', initializer='zeros')
-        self.ranking_loss = self.add_weight(name='ranking_loss', initializer='zeros')
-
-    def update_state(self, y_ref, y_style, label):
-        m  = tf.cast(tf.broadcast_to(0.2, shape=y_ref.shape), dtype=tf.float32)
-        u  = tf.cast(tf.broadcast_to(0, shape=y_ref.shape), dtype=tf.float32)
-        i  = tf.cast(tf.broadcast_to(1, shape=y_ref.shape), dtype=tf.float32)
-        y = tf.cast(label[..., tf.newaxis], dtype=tf.float32)
-        dist = tf.norm(y_ref-y_style, ord='euclidean', axis=-1, keepdims=True)
-        loss = y*dist + (i-y)*tf.reduce_max(tf.stack([u,m-dist]), axis=0)
-        rk_loss = tf.reduce_mean(loss)
-        self.ranking_loss.assign(rk_loss)
-
-        prb = dist/m
-        bool_prb = tf.cast(tf.math.floor(prb), dtype=tf.bool)
-        bool_lbl = tf.cast(label, dtype=tf.bool)
-        rel_acc = tf.reduce_mean(tf.cast(tf.math.logical_not(tf.math.logical_xor(bool_prb, bool_lbl)), dtype=tf.float32))
-        self.relative_acc.assign(rel_acc)
-        
-
-
-    def result(self):
-        return self.relative_acc, self.ranking_loss
 
 # %%
+
+def define_stl_classifier(latent_size, classes, image_size=(128, 128, 3)):
+    feat_model = tf.keras.applications.ResNet101V2(include_top=False, input_shape=image_size)
+    t = False
+    for layer in feat_model.layers:
+        if layer.name == "conv5_block3_1_conv":
+            t = True
+        layer.trainable = t
+    x = feat_model.output
+    x = GlobalMaxPool2D(name='pool')(x)
+    x = Dense(latent_size, activation='relu', use_bias=True, name='latent_layer')(x)
+    output = Dense(classes, activation='softmax', name='output')(x)
+
+    model = Model(inputs=feat_model.input, outputs=output, name='style_classifier')
+    return model
+
+#%%
+
+# gen_model = define_stl_classifier(32, 36, (128, 128, 3))
+# gen_model.summary()
+#tf.keras.utils.plot_model(gen_model, show_shapes=True)
+#%%
