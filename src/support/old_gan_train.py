@@ -263,3 +263,67 @@ if __name__ == "__main__":
 
 
 # %%
+# def process_path(file_path):
+#     #str_file_path = bytes.decode(file_path.eval())
+#     #str_file_path = K.eval(file_path)
+#     cur_ind = tf.string.regex_replace(tf.string.split(file_path, sep=os.sep)[-1], '[.?!,¿][a-z]*', '')
+#     #cur_ind = str_file_path.split(os.sep)[-1].strip('.jpg')
+#     cur_style = stenc_df[int(cur_ind)-1]
+#     random_num = random.randint(1, config.DESC_TRAIN_SIZE)
+#     random_bool = random.randint(0,1)
+#     if random_bool:
+#         if random_num == int(cur_ind):
+#             random_num = random.randint(1, config.DESC_TRAIN_SIZE)
+#     else:
+#         random_num = max(random.randint(1,10), int(cur_ind)-5)
+#     rand_style = stenc_df[random_num-1]
+#     cur_img = process_img(tf.io.read_file(file_path))
+#     rand_path = tf.strings.join([*str_file_path.split(os.sep)[:-1],f'{random_num}.jpg'],os.sep)
+#     rand_img = process_img(tf.io.read_file(rand_path))
+
+#     if cur_style == rand_style:
+#         label = tf.constant(1, dtype=tf.float32)
+#     else:
+#         label = tf.constant(0, dtype=tf.float32)
+
+#     return cur_img, rand_img, label
+
+###########################################################
+
+
+    # get_path = lambda x: stenc_df.at[x, 'path']
+    # func0= np.vectorize(get_path)
+    
+    # add_root = lambda x: '{0}/{1}'.format(root_path, x)
+    # func1 = np.vectorize(add_root)
+
+    # get_img = lambda x: process_path(x)
+    # func2 = np.vectorize(get_img)
+
+    # #lower, higher, root_path = 1, 2923, './data/data/StyleDataset'
+    # idx1 = np.array(range(lower, min(higher, lower+n)))
+    # idx2 = np.random.choice(range(lower, higher), n, replace=False)
+    # assert idx1.shape == idx2.shape
+    # idxs = np.vstack([idx1, idx2])
+    # labels = tf.convert_to_tensor(np.apply_along_axis(get_lbl, 0, idxs), dtype=tf.int32)
+    # #vec1 = func1(np.apply_along_axis(get_fpath, 0, idx1))
+    # #vec2 = func1(np.apply_along_axis(get_fpath, 0, idx2))
+    # vec1 = stenc_df.loc[idx1, 'path'].to_numpy()[np.newaxis, ...]
+    # vec2 = stenc_df.loc[idx2, 'path'].to_numpy()[np.newaxis, ...]
+    # #print(labels)
+    # imgs1 = np.moveaxis(np.apply_along_axis(process_path, 0, vec1), [-1], [0])
+    # imgs2 = np.moveaxis(np.apply_along_axis(process_path, 0, vec2), [-1], [0])
+    # yield  tf.convert_to_tensor(imgs1, dtype=tf.float32), tf.convert_to_tensor(imgs2, dtype=tf.float32), labels
+
+# def get_lbl(x):
+#     x1, x2 = x[0], x[1]
+#     lbl1 = stenc_df.at[x1, 'style_code']
+#     lbl2 = stenc_df.at[x2, 'style_code']
+#     label = 0
+#     if lbl1 == lbl2:
+#         label = 1
+#     return label
+
+# def get_fpath(idx):
+#     return stenc_df.at[idx, 'path'].values
+   
