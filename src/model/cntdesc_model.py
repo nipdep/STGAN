@@ -3,7 +3,7 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal, HeUniform
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D
+from tensorflow.keras.layers import Input, Lambda, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 #import config 
@@ -36,8 +36,8 @@ def define_cnt_encoder(latent_size, image_shape=(128, 128, 3)):
     d = BatchNormalization(name='CntEnc6_norm')(d, training=True)
     d = LeakyReLU(alpha=0.2, name='CntEnc6_relu')(d)
     #output
-    output = GlobalMaxPool2D(name='output')(d)
-
+    pool = GlobalMaxPool2D(name='output')(d)
+    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='CntL2_norm')(pool)
     #define model
     model = Model(inputs=img_in, outputs=output, name='content_base_encoder')
     return model
@@ -50,14 +50,17 @@ class ContentNet(tf.keras.Model):
 
     @tf.function
     def call(self, inputs):
-        cnt_img, trans_img = inputs
+        cnt_img, trans_img, diff_img = inputs
         with tf.name_scope("Content") as scope:
             ft1 = self._model(cnt_img)
-
+            ft1 = tf.math.l2_normalize(ft1, axis=-1)
         with tf.name_scope("Transfer") as scope:
             ft2 = self._model(trans_img)
-
-        return [ft1, ft2]
+            ft2 = tf.math.l2_normalize(ft2, axis=-1)
+        with tf.name_scope("Diverger"):
+            ft3 = self._model(diff_img)
+            ft3 = tf.math.l2_normalize(ft3, axis=-1)
+        return [ft1, ft2, ft3]
 
 
 gc_model = define_cnt_encoder(64)

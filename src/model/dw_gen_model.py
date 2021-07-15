@@ -168,83 +168,83 @@ def define_mlt_desc_model(latent_size, image_shape):
     ## wavelet trasform style extraction head
     # level one decomposition starts
     conv_1 = Conv2D(64, kernel_size=(3, 3), padding='same', name='conv_1')(input_l1)
-    norm_1 = BatchNormalization(name='norm_1')(conv_1)
+    norm_1 = InstanceNormalization(name='norm_1')(conv_1)
     relu_1 = Activation('relu', name='relu_1')(norm_1)
 
     conv_1_2 = Conv2D(64, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_1_2')(relu_1)
-    norm_1_2 = BatchNormalization(name='norm_1_2')(conv_1_2)
+    norm_1_2 = InstanceNormalization(name='norm_1_2')(conv_1_2)
     relu_1_2 = Activation('relu', name='relu_1_2')(norm_1_2)
 
     # level two decomposition starts
     conv_a = Conv2D(filters=64, kernel_size=(3, 3), padding='same', name='conv_a')(input_l2)
-    norm_a = BatchNormalization(name='norm_a')(conv_a)
+    norm_a = InstanceNormalization(name='norm_a')(conv_a)
     relu_a = Activation('relu', name='relu_a')(norm_a)
 
     # concate level one and level two decomposition
     concate_level_2 = Concatenate()([relu_1_2, relu_a])
     conv_2 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_2')(concate_level_2)
-    norm_2 = BatchNormalization(name='norm_2')(conv_2)
+    norm_2 = InstanceNormalization(name='norm_2')(conv_2)
     relu_2 = Activation('relu', name='relu_2')(norm_2)
 
     conv_2_2 = Conv2D(128, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_2_2')(relu_2)
-    norm_2_2 = BatchNormalization(name='norm_2_2')(conv_2_2)
+    norm_2_2 = InstanceNormalization(name='norm_2_2')(conv_2_2)
     relu_2_2 = Activation('relu', name='relu_2_2')(norm_2_2)
 
     # level three decomposition starts 
     conv_b = Conv2D(filters=64, kernel_size=(3, 3), padding='same', name='conv_b')(input_l3)
-    norm_b = BatchNormalization(name='norm_b')(conv_b)
+    norm_b = InstanceNormalization(name='norm_b')(conv_b)
     relu_b = Activation('relu', name='relu_b')(norm_b)
 
     conv_b_2 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_b_2')(relu_b)
-    norm_b_2 = BatchNormalization(name='norm_b_2')(conv_b_2)
+    norm_b_2 = InstanceNormalization(name='norm_b_2')(conv_b_2)
     relu_b_2 = Activation('relu', name='relu_b_2')(norm_b_2)
 
     # concate level two and level three decomposition 
     concate_level_3 = Concatenate()([relu_2_2, relu_b_2])
     conv_3 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_3')(concate_level_3)
-    norm_3 = BatchNormalization(name='norm_3')(conv_3)
+    norm_3 = InstanceNormalization(name='norm_3')(conv_3)
     relu_3 = Activation('relu', name='relu_3')(norm_3)
 
     conv_3_2 = Conv2D(256, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_3_2')(relu_3)
-    norm_3_2 = BatchNormalization(name='norm_3_2')(conv_3_2)
+    norm_3_2 = InstanceNormalization(name='norm_3_2')(conv_3_2)
     relu_3_2 = Activation('relu', name='relu_3_2')(norm_3_2)
 
     # level four decomposition start
     conv_c = Conv2D(64, kernel_size=(3, 3), padding='same', name='conv_c')(input_l4)
-    norm_c = BatchNormalization(name='norm_c')(conv_c)
+    norm_c = InstanceNormalization(name='norm_c')(conv_c)
     relu_c = Activation('relu', name='relu_c')(norm_c)
 
     conv_c_2 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_c_2')(relu_c)
-    norm_c_2 = BatchNormalization(name='norm_c_2')(conv_c_2)
+    norm_c_2 = InstanceNormalization(name='norm_c_2')(conv_c_2)
     relu_c_2 = Activation('relu', name='relu_c_2')(norm_c_2)
 
     conv_c_3 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_c_3')(relu_c_2)
-    norm_c_3 = BatchNormalization(name='norm_c_3')(conv_c_3)
+    norm_c_3 = InstanceNormalization(name='norm_c_3')(conv_c_3)
     relu_c_3 = Activation('relu', name='relu_c_3')(norm_c_3)
 
     # concate level level three and level four decomposition
     concate_level_4 = Concatenate()([relu_3_2, relu_c_3])
     conv_4 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_4')(concate_level_4)
-    norm_4 = BatchNormalization(name='norm_4')(conv_4)
+    norm_4 = InstanceNormalization(name='norm_4')(conv_4)
     relu_4 = Activation('relu', name='relu_4')(norm_4)
 
     conv_4_2 = Conv2D(256, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_4_2')(relu_4)
-    norm_4_2 = BatchNormalization(name='norm_4_2')(conv_4_2)
+    norm_4_2 = InstanceNormalization(name='norm_4_2')(conv_4_2)
     relu_4_2 = Activation('relu', name='relu_4_2')(norm_4_2)
 
     conv_5_1 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_5_1')(relu_4_2)
-    norm_5_1 = BatchNormalization(name='norm_5_1')(conv_5_1)
+    norm_5_1 = InstanceNormalization(name='norm_5_1')(conv_5_1)
     relu_5_1 = Activation('relu', name='relu_5_1')(norm_5_1)
 
     conv_5_2 = Conv2D(latent_size, kernel_size=(3, 3), padding='same', name='conv_5_2')(relu_5_1)
-    norm_5_2 = BatchNormalization(name='norm_5_2')(conv_5_2)
+    norm_5_2 = InstanceNormalization(name='norm_5_2')(conv_5_2)
     relu_5_2 = Activation('relu', name='relu_5_2')(norm_5_2)
 
     logits = GlobalMaxPool2D(name='logits')(relu_5_2)
     model = Model(inputs=style_image, outputs=[logits, relu_5_1, relu_4, relu_3, relu_2, relu_1])
     return model
 
-dss_model = define_mlt_desc_model(64, (128, 128, 3))
+# dss_model = define_mlt_desc_model(64, (128, 128, 3))
 # tf.keras.utils.plot_model(dss_model, show_shapes=True)
 
 class StyleNet(tf.keras.Model):
@@ -257,10 +257,10 @@ class StyleNet(tf.keras.Model):
     def call(self, inputs):
         ref_img, trans_img = inputs
         with tf.name_scope("Style") as scope:
-            ft1  = self._model(ref_img)[0]
+            ft1  = self._model(ref_img)
             #ft1 = tf.math.l2_normalize(ft1, axis=-1)
         with tf.name_scope("Transfer") as scope:
-            ft2 = self._model(trans_img)[0]
+            ft2 = self._model(trans_img)
             #ft2 = tf.math.l2_normalize(ft2, axis=-1)
         return [ft1, ft2]
     
@@ -308,8 +308,8 @@ def define_generator(style_header, latent_size, image_shape=(128, 128, 3)):
     model = Model(inputs=[content_image, style_image], outputs=out_image, name='generator')
     return model
 
-g_model = define_generator(dss_model, config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
-tf.keras.utils.plot_model(g_model, show_shapes=True)
+# g_model = define_generator(dss_model, config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
+# tf.keras.utils.plot_model(g_model, show_shapes=True)
 #%%
 
 def vgg_cnt_gen_model(image_shape):
