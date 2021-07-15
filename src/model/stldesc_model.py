@@ -8,7 +8,7 @@ import tensorflow.keras.backend as K
 from tensorflow_addons.layers import InstanceNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal, HeUniform
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D, Lambda, Reshape, Add
+from tensorflow.keras.layers import Input, Conv2D, Subtract, Flatten, Dense, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D, Lambda, Reshape, Add
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow.python.keras.layers.pooling import GlobalAveragePooling2D
@@ -318,7 +318,9 @@ def define_desc_encoder(latent_size, image_shape=(128, 128, 3)):
 
 #%%
 
-def define_stl_encoder(latent_size, image_shape):
+def define_stl_encoder(latent_size, n_classes, image_shape):
+    idx = Input(shape=(), name='index_input')
+    emb_layer = tf.keras.layers.Embedding(n_classes, 32, name="embedding")
     feat_model = tf.keras.applications.ResNet101V2(include_top=False, input_shape=image_shape)
     t = False
     for layer in feat_model.layers:
@@ -328,15 +330,17 @@ def define_stl_encoder(latent_size, image_shape):
     x = feat_model.output
     x = GlobalAveragePooling2D(name='pool')(x)
     x = Dropout(0.3, name='dropout')(x)
-    output = Dense(latent_size, activation='relu')(x)
-    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='StlL2_norm')(output)
+    x = Dense(latent_size, activation='relu')(x)
+    enc_out = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='StlL2_norm')(x)
+    y = emb_layer(idx)
+    dist = Subtract(name="subs")([enc_out, y])
 
-    model = Model(inputs=feat_model.input, outputs=output, name='style_base_encoder')
+    model = Model(inputs=[feat_model.input,idx], outputs=dist, name='style_base_encoder')
     return model
 #%%
-# gen_model = define_stl_encoder(32, (128, 128, 3))
-# gen_model.summary()
-#tf.keras.utils.plot_model(gen_model, show_shapes=True)
+# gen_model = define_stl_encoder(32, 36, (128, 128, 3))
+#gen_model.summary()
+# tf.keras.utils.plot_model(gen_model, show_shapes=True)
 #%%
 class StyleNet(tf.keras.Model):
 
@@ -388,3 +392,30 @@ def define_stl_classifier(latent_size, classes, image_size=(128, 128, 3)):
 # gen_model.summary()
 #tf.keras.utils.plot_model(gen_model, show_shapes=True)
 #%%
+
+class EmbStyleNet(tf.keras.Model):
+
+    def __init__(self, base_model):
+        super(EmbStyleNet, self).__init__()
+        self._model = base_model 
+
+    @tf.function
+    def call(self, inputs):
+        ref_img, style_img, ref_lbl, style_lbl = inputs
+        with tf.name_scope("RefT") as scope:
+            ft1 = self._model([ref_img, ref_lbl])
+            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
+        with tf.name_scope("RefF") as scope:
+            ft2 = self._model([ref_img, style_lbl])
+            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
+        with tf.name_scope("StyleT") as scope:
+            ft3 = self._model([style_img, style_lbl])
+            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
+        with tf.name_scope("StyleF") as scope:
+            ft4 = self._model([style_img, ref_lbl])
+            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
+        return [ft1, ft2, ft3, ft4]
+    
+    @tf.function
+    def get_features(self, inputs):
+        return tf.math.l2_normalize(self._model(inputs), axis=-1)
