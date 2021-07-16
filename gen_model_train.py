@@ -78,36 +78,36 @@ def process_path(file_path):
     return img
 
 def train_gen():
-    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/StyleDataset', './data/data/MSO/MSOCntImg', 1000
+    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/styleU', './data/data/MSO/MSOCntImg', 1000
     idx = np.random.choice(range(lower, higher), n, replace=False)
     for i in idx:
         #i = random.randint(lower, higher)
-        random_num = random.randint(2923, 3164)
+        random_num = random.randint(1, stenc_df.shape[0])
         # random_bool = random.randint(0,1)
         # if random_bool:
         #     if random_num == int(i):
         #         random_num = random.randint(lower, higher)
         # else:
         #     random_num = max(random.randint(1,10), int(i)-5)
-        stl_det = os.path.join(root_cnt_path, f'{i}.jpg')
-        cnt_det = stenc_df.loc[random_num, ['path', 'style_code']]
+        cnt_det = os.path.join(root_cnt_path, f'{i}.jpg')
+        stl_det = stenc_df.loc[random_num, ['path', 'style_code']]
 
         # label = 0
         # if img1_det['style_code'] == img2_det['style_code']:
         #     label = 1
         #print(os.path.join(root_path, img1_det['path']), os.path.join(root_path, img2_det['path']))
         try :
-            stl_img = process_path(os.path.join(stl_det))
-            cnt_img = process_path(os.path.join(root_style_path, cnt_det['path']))
-            yield stl_img, cnt_img
+            stl_img = process_path(os.path.join(cnt_det))
+            cnt_img = process_path(os.path.join(root_style_path, stl_det['path']))
+            yield stl_img, cnt_img#, stl_det['style_code']
         except:
-            print(f"Error in file {cnt_det['path']} | {stl_det}")
+            print(f"Error in file {cnt_det} | {stl_det['path']}")
             continue
 
 # image resize and rescale pipeline
 resize_and_rescale = tf.keras.Sequential([
     prep.Resizing(config.IMG_HEIGHT, config.IMG_WIDTH),
-    prep.Rescaling(scale=1./127.5, offset=-1)
+    prep.Normalization()
 ])
 
 def prepare(ds, shuffle=False):
@@ -154,13 +154,13 @@ def train_step(cnt_in, style_in):
         stl_vec, gen_vec1 = stl_base_model(style_in), stl_base_model(gen_img)
         
         cnt_loss = pairWiseRankingLoss(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
-        stl_loss = pairWiseRankingLoss(stl_vec, gen_vec1, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
+        stl_loss = stlLoss(stl_vec, gen_vec1)
         gen_loss = cntLoss(cnt_in, gen_img)
-        total_loss = ganLoss(stl_loss,cnt_loss, gen_loss)
+        total_loss = genLoss(stl_loss,cnt_loss, gen_loss)
 
     grads = gen_tape.gradient(total_loss, gen_model.trainable_variables)
     opt.apply_gradients(zip(grads, gen_model.trainable_variables))
-    stl_metrics.update_state(stl_vec, gen_vec1, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
+    stl_metrics.update_state(stl_vec, gen_vec1)
     cnt_metrics.update_state(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
     return total_loss, gen_loss, cnt_loss, stl_loss
 
@@ -186,9 +186,9 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
     stl_sample, cnt_sample = dataset
     gen_sample = g_model([stl_sample, cnt_sample])
     #rescale pixels values
-    X_cnt = (cnt_sample+1)/2.0
-    X_stl = (stl_sample+1)/2.0
-    X_trn = (gen_sample+1)/2.0
+    X_cnt = (cnt_sample+1)/2
+    X_stl = (stl_sample+1)/2
+    X_trn = (gen_sample+1)/2
     # plot samples
     for i in range(n_samples):
         pyplot.subplot(3, n_samples, 1 + i)
@@ -245,7 +245,7 @@ def train(epochs=3):
         # val_metrics.reset_states()
         # print("Validation acc: %.4f" % (float(val_acc),))
         print("Time taken: %.2fs" % (time.time() - start_time))
-        summarize_performance(epoch+1, gen_model, [cnt_batch, style_batch], 5)
+        summarize_performance(epoch, gen_model, [cnt_batch, style_batch], 5)
 
 
 # def train(g_model, dataset, n_epoch=100, batch_size=16):
@@ -293,22 +293,23 @@ def train(epochs=3):
 #%%
 if __name__ == "__main__":
     #load dataset
-    stenc_df = pd.read_csv('./data/data/StyleDataset/StyleEnc.csv', index_col=0)
+    stenc_df = pd.read_csv('./data/data/styleU/StyleEnc.csv', index_col=0)
     train_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'train'))
     train_ds = tf.data.Dataset.from_generator(
         train_gen,
         output_signature=(
             tf.TensorSpec(shape=(128,128, 3), dtype=tf.float32),
-            tf.TensorSpec(shape=(128,128,3), dtype=tf.float32),
+            tf.TensorSpec(shape=(128,128,3), dtype=tf.float32)
+            #tf.TensorSpec(shape=(), dtype=tf.int32)
         )
 
     )
     train_dataset = prepare(train_ds, shuffle=True)
 
     cnt_model_dir = "./data/models/descc_wgt1.h5"
-    stl_model_dir = "./data/models/descs_wgt1.h5"
-    stl_base_model = define_stl_encoder(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
-    stl_base_model.load_weights(stl_model_dir)
+    stl_model_dir = "./data/models/dess_m6.h5"
+    #stl_base_model = define_stl_encoder(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
+    stl_base_model = load_model(stl_model_dir)
     cnt_base_model = define_cnt_encoder(config.DESCC_LATENT_SIZE, config.IMAGE_SHAPE)
     cnt_base_model.load_weights(cnt_model_dir)
 
@@ -318,7 +319,9 @@ if __name__ == "__main__":
     lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-3, train_steps, 1e-5, 2)
     opt = tf.optimizers.Adam(lr_fn)
 
-    stl_metrics = MarginalAcc()
+    #stl_metrics = MarginalAcc()
+    stlLoss = tf.keras.losses.MeanSquaredError()
+    stl_metrics = tf.keras.metrics.MeanAbsoluteError()
     cnt_metrics = MarginalAcc()
     #train model
     train(config.GAN_EPOCHS)

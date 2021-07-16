@@ -1,5 +1,6 @@
 #%%
 import tensorflow as tf
+import numpy as np
 import tensorflow_addons as tfa
 from datetime import datetime
 
@@ -16,6 +17,11 @@ from tensorflow.keras import Model
 
 bt = 16
 
+def prep_fn(img):
+    img = img.astype(np.float32) / 255.0
+    img = (img - 0.5) * 2
+    return img
+
 datagen = ImageDataGenerator(
     rotation_range=40,
     width_shift_range=0.4,
@@ -25,7 +31,7 @@ datagen = ImageDataGenerator(
     zoom_range=(0.5,0.5),
     horizontal_flip=True,
     vertical_flip=True,
-    rescale=1/255.,
+    preprocessing_function=prep_fn,
     validation_split=0.1
 )
 
@@ -33,7 +39,7 @@ train_dt = datagen.flow_from_directory(
     config.DESC_STL_DIR,
     target_size=(128, 128),
     color_mode='rgb',
-    class_mode='categorical',
+    class_mode='sparse',
     batch_size=bt,
     shuffle=True,
     seed=114,
@@ -45,7 +51,7 @@ val_dt = datagen.flow_from_directory(
     config.DESC_STL_DIR,
     target_size=(128, 128),
     color_mode='rgb',
-    class_mode='categorical',
+    class_mode='sparse',
     batch_size=bt,
     shuffle=False,
     seed=114,
@@ -57,12 +63,12 @@ STEP_SIZE_TRAIN=train_dt.n//train_dt.batch_size
 STEP_SIZE_VALID=val_dt.n//val_dt.batch_size
 
 #%%
-
-base_model = define_stl_classifier(config.DESCS_LATENT_SIZE, 36,  config.IMAGE_SHAPE)
+lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-3, 200, 1e-5, 2)
+base_model = define_stl_classifier(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
 base_model.compile(
-    optimizer=Adam(0.002),
-    loss=tf.keras.losses.CategoricalCrossentropy(from_logits=False),
-    metrics=[tf.keras.metrics.CategoricalAccuracy()]
+    optimizer=Adam(lr_fn),
+    loss=tf.keras.losses.MeanSquaredError(),
+    metrics=[tf.keras.metrics.MeanAbsoluteError()]
 )
 
 
@@ -80,5 +86,5 @@ history = base_model.fit(
 
 #%%
 
-base_model.save('./data/models/dess_m1.h5')
+base_model.save('./data/models/dess_m6.h5')
 # %%
