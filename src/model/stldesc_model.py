@@ -371,7 +371,7 @@ class StyleNet(tf.keras.Model):
 
 # %%
 
-def define_stl_classifier(latent_size, classes, image_size=(128, 128, 3)):
+def define_stl_classifier(latent_size, image_size=(128, 128, 3)):
     feat_model = tf.keras.applications.ResNet101V2(include_top=False, input_shape=image_size)
     t = False
     for layer in feat_model.layers:
@@ -380,8 +380,9 @@ def define_stl_classifier(latent_size, classes, image_size=(128, 128, 3)):
         layer.trainable = t
     x = feat_model.output
     x = GlobalMaxPool2D(name='pool')(x)
+    x = Dropout(rate=0.4, name='stl_dropout')(x)
     x = Dense(latent_size, activation='relu', use_bias=True, name='latent_layer')(x)
-    output = Dense(classes, activation='softmax', name='output')(x)
+    output = Dense(1, name='output')(x)
 
     model = Model(inputs=feat_model.input, outputs=output, name='style_classifier')
     return model
