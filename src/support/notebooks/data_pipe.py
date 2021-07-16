@@ -16,20 +16,21 @@ style_enc_file = '../../../data/data/Desc_dataset/style_enc.csv' #config params
 # ## rename files by giving style index
 
 # %%
-root_path = pathlib.Path('../../../data/data/MSO/MSOCntImg')
+root_path = pathlib.Path('../../../data/data/styleU')
 idxs = []
 styles = []
 style_enc = {}
 n = 1
-m = 0
-for file in root_path.glob('*'):
-    m += 1
-    # st_name = ''.join(file.stem.split("_")[:-1])
-    # ind = file.stem.split("_")[-1]
-    # if st_name not in style_enc:
-    #     style_enc[st_name] = n
-    #     n+=1
-    os.rename(file, os.path.join(file.parent, f'{m}.jpg'))
+m = 10000
+for folder in root_path.glob('*'):
+    for file in folder.glob('*'):
+        m += 1
+        # st_name = ''.join(file.stem.split("_")[:-1])
+        # ind = file.stem.split("_")[-1]
+        # if st_name not in style_enc:
+        #     style_enc[st_name] = n
+        #     n+=1
+        os.rename(file, os.path.join(file.parent, f'{m}.jpg'))
     # idxs.append(m)
     # styles.append(style_enc[st_name])
 # st_df = pd.DataFrame(data={'fname' : idxs, 'style_code' : styles})
@@ -132,8 +133,8 @@ for f in sample_ds.take(num):
 
 
 # %%
-dt_path = "../../../data/data/StyleDataset"
-style_enc_file = "../../../data/data/StyleDataset/StyleEnc.csv"
+dt_path = "../../../data/data/styleU"
+style_enc_file = "../../../data/data/styleU/StyleEnc.csv"
 root_path = pathlib.Path(dt_path)
 idxs = []
 styles = []
@@ -142,26 +143,27 @@ paths = []
 style_enc = {}
 n = 1
 m = 0
-for partition in root_path.glob('*'):
-    state = partition.stem[0]
-    for folder in partition.glob('*'):
-        stl = int(folder.stem)
-        for file in folder.glob('*'):
-            fpath = '/'.join([*str(file).split('\\')[-3:-1], f'{n}.jpg'])
-            os.rename(file, os.path.join(file.parent, f'{n}.jpg'))
-            idxs.append(n)
-            styles.append(stl)
-            states.append(state)
-            paths.append(fpath)
-            n+=1
+# for partition in root_path.glob('*'):
+#     state = partition.stem[0]
+for folder in root_path.glob('*'):
+    stl = int(folder.stem)
+    for file in folder.glob('*'):
+        fpath = '/'.join([*str(file).split('\\')[-2:-1], f'{n}.jpg'])
+        os.rename(file, os.path.join(file.parent, f'{n}.jpg'))
+        idxs.append(n)
+        styles.append(stl)
+        #states.append(state)
+        paths.append(fpath)
+        n+=1
 
-st_df = pd.DataFrame(data={'fname' : idxs, 'path' : paths, 'style_code' : styles, 'state' : states})
+st_df = pd.DataFrame(data={'fname' : idxs, 'path' : paths, 'style_code' : styles})
 st_df.to_csv(style_enc_file, index=False)
 # %%
 import pandas as pd 
 # %%
-df = pd.read_csv('../../../data/data/StyleDataset/StyleEnc.csv', index_col=0)
-
+style_enc_file = "../../../data/data/styleU/StyleEnc.csv"
+df = pd.read_csv(style_enc_file, index_col=0)
+df.shape[0]
 # %%
 l =df.loc[1,['path', 'style_code']]
 # %%

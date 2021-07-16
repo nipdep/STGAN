@@ -17,7 +17,7 @@ def pairWiseRankingLoss(y_ref, y_style, label):
     w = tf.cast(tf.broadcast_to(2, shape=[y_ref.shape[0], ]), dtype=tf.float32)
     y = tf.cast(label, dtype=tf.float32)
     dist = tf.divide(tf.abs(tf.keras.losses.cosine_similarity(y_ref,y_style)+i), w)
-    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),-1*tf.reduce_min(tf.stack([u,m-dist]), axis=0))
+    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
     
 

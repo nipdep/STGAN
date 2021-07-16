@@ -9,7 +9,7 @@ DESC_ENC_DIR = './data/data/Desc_dataset/style_enc.csv'
 GAN_DATASET_DIR = './data/data/comp_matrics.npz'
 DESC_CNT_TRDT_DIR = './data/data/desc_cnt_matrics.npz'
 DESC_CNT_VALDT_DIR = './data/data/desc_validation.npz'
-DESC_STL_DIR = './data/data/style dataset2/'
+DESC_STL_DIR = './data/data/style datasetU/'
 GAN_DATASET_URL = 'https://anonfiles.com/vah4ba3au4/comp_matrics_npz'
 
 # image parameters
