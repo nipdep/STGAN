@@ -53,18 +53,18 @@ class ContentNet(tf.keras.Model):
         cnt_img, trans_img, diff_img = inputs
         with tf.name_scope("Content") as scope:
             ft1 = self._model(cnt_img)
-            ft1 = tf.math.l2_normalize(ft1, axis=-1)
+            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
         with tf.name_scope("Transfer") as scope:
             ft2 = self._model(trans_img)
-            ft2 = tf.math.l2_normalize(ft2, axis=-1)
+            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
         with tf.name_scope("Diverger"):
             ft3 = self._model(diff_img)
-            ft3 = tf.math.l2_normalize(ft3, axis=-1)
+            #ft3 = tf.math.l2_normalize(ft3, axis=-1)
         return [ft1, ft2, ft3]
 
 
-gc_model = define_cnt_encoder(64)
-# CntNet = ContentNet(gc_model)
-tf.keras.utils.plot_model(gc_model, show_shapes=True)
+# gc_model = define_cnt_encoder(64)
+# # CntNet = ContentNet(gc_model)
+# tf.keras.utils.plot_model(gc_model, show_shapes=True)
 
-#%%    
+#%% 

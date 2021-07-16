@@ -23,7 +23,7 @@ def define_generator(cnt_model, stl_model, image_shape):
     init = RandomNormal(stddev=0.02)
 
     cnt_vec = cnt_model.output
-    stl_vec = stl_model.output
+    stl_vec = stl_model.get_layer('latent_layer').output
 
     full_latent_vec = Concatenate(name='Combined_latent_layer')([cnt_vec, stl_vec])
     latent_mat = tf.keras.layers.Reshape((1, 1, 64))(full_latent_vec)
@@ -52,12 +52,12 @@ def define_generator(cnt_model, stl_model, image_shape):
     #size:32
     g = Conv2DTranspose(128, (4, 4), strides=(2,2), padding='same', kernel_initializer=init, name='dec5_ConvT')(g)
     g = BatchNormalization(name='dec5_norm')(g, training=True)
-    g = Concatenate(name='dec5_concat')([g, cnt_model.get_layer('CntEnc2_relu').output])
+    #g = Concatenate(name='dec5_concat')([g, cnt_model.get_layer('CntEnc2_relu').output])
     g = ReLU(name='dec5_relu')(g)
     #size:64
     g = Conv2DTranspose(64, (4, 4), strides=(2,2), padding='same', kernel_initializer=init, name='dec6_ConvT')(g)
     g = BatchNormalization(name='dec6_norm')(g, training=True)
-    g = Concatenate(name='dec6_concat')([g, cnt_model.get_layer('CntEnc1_relu').output])
+    #g = Concatenate(name='dec6_concat')([g, cnt_model.get_layer('CntEnc1_relu').output])
     g = ReLU(name='dec6_relu')(g)
     #size:128
     g = Conv2DTranspose(3, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='dec7_ConvT')(g)
