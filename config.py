@@ -4,12 +4,12 @@
 LOG_DIR = './logs'
 GAN_LOG_DIR = './logs/gan'
 MODEL_DIR = './data/models'
-DESC_ROOT_DIR = './data/data/StyleDataset'  
+DESC_ROOT_DIR = './data/data/style datasetU/data'  
 DESC_ENC_DIR = './data/data/Desc_dataset/style_enc.csv'
 GAN_DATASET_DIR = './data/data/comp_matrics.npz'
 DESC_CNT_TRDT_DIR = './data/data/desc_cnt_matrics.npz'
 DESC_CNT_VALDT_DIR = './data/data/desc_validation.npz'
-DESC_STL_DIR = './data/data/style datasetU/'
+DESC_STL_DIR = './data/data/style datasetU/data'
 GAN_DATASET_URL = 'https://anonfiles.com/vah4ba3au4/comp_matrics_npz'
 
 # image parameters

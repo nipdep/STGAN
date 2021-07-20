@@ -130,7 +130,7 @@ if __name__ == '__main__':
     #opt = tf.keras.optimizers.Adam(lr=config.DESCC_INIT_LR)
     train(config.DESCC_EPOCHS)
 
-    filename = 'descc_wgt1.h5'
+    filename = 'descc_wgt2.h5'
     base_model.save_weights(os.path.join(config.MODEL_DIR, filename))
     logger.info(f">> Saved : {filename}  ")
 
