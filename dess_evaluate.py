@@ -16,7 +16,7 @@ import config
 from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder
 
 #%%
-model_dir = "data/models/descs_wgt1.h5"
+model_dir = "data/models/descs_wgt2.h5"
 style_image_dir = "data/data/styles/the_scream.jpg"
 content_image_dir = "data/data/styles/sample.jpg"
 
@@ -80,7 +80,7 @@ def process_path(file_path):
     return img
 
 def val_gen():
-    lower, higher, root_path, n = 2923, 3164, './data/data/StyleDataset', 200
+    lower, higher, root_path, n = 1, 3045, './data/data/style datasetU/data', 200
     # idx = np.random.choice(range(lower, higher), n, replace=False, seed=111)
     # for i in idx:
     idx = np.array(range(lower, min(higher, lower+n)))
@@ -117,7 +117,7 @@ resize_and_rescale = tf.keras.Sequential([
 # image augmentation pipeline
 data_augmentation = tf.keras.Sequential([
     prep.RandomContrast(0.2),
-    prep.RandomFlip("horizontal_and_vertical"),
+    prep.RandomFlip("horizontal"),
     prep.RandomCrop(config.IMG_HEIGHT, config.IMG_WIDTH),
     prep.RandomRotation(0.3, fill_mode='nearest', interpolation='bilinear'),
     prep.RandomZoom(height_factor=(-0.2, 0.2), width_factor=(-0.2, 0.2), fill_mode='nearest', interpolation='bilinear')
@@ -175,8 +175,10 @@ def evaluate(model, dataset, n_samples):
         # plt.imshow(rescale(samples[i][2]))
     plt.show()
 
+#%%
+
 if __name__ == '__main__':
-    stenc_df = pd.read_csv('./data/data/StyleDataset/StyleEnc.csv', index_col=0)
+    stenc_df = pd.read_csv('./data/data/style datasetU/StyleEnc.csv', index_col=0)
     val_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'validation'))
     val_ds = tf.data.Dataset.from_generator(
         val_gen,
