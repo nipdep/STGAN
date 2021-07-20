@@ -6,7 +6,7 @@ from src.model.cntdesc_model import define_cnt_encoder, ContentNet
 from src.model.stldesc_model import define_desc_encoder, StyleNet
 from src.model.gen_model import define_generator
 from src.support.loss_functions import pairWiseRankingLoss, MarginalAcc, triplet_loss
-from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder
+from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder, define_stl_regressor
 
 #from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
 
@@ -32,7 +32,6 @@ from matplotlib import pyplot
 from tensorflow.python.autograph.pyct import transformer
 from livelossplot import PlotLosses
 from livelossplot.outputs import MatplotlibPlot
-
 #%%
 # set logger
 logging.basicConfig()
@@ -78,8 +77,8 @@ def process_path(file_path):
     return img
 
 def train_gen():
-    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/styleU', './data/data/MSO/MSOCntImg', 1000
-    idx = np.random.choice(range(lower, higher), n, replace=False)
+    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/style datasetU/data', './data/data/MSO/MSOCntImg', 2000
+    idx = np.random.choice(range(lower, higher), n, replace=True)
     for i in idx:
         #i = random.randint(lower, higher)
         random_num = random.randint(1, stenc_df.shape[0])
@@ -99,7 +98,7 @@ def train_gen():
         try :
             stl_img = process_path(os.path.join(cnt_det))
             cnt_img = process_path(os.path.join(root_style_path, stl_det['path']))
-            yield stl_img, cnt_img#, stl_det['style_code']
+            yield stl_img, cnt_img, stl_det['style_code']
         except:
             print(f"Error in file {cnt_det} | {stl_det['path']}")
             continue
@@ -117,7 +116,7 @@ def prepare(ds, shuffle=False):
     # ds = ds.map(lambda x1, x2, y: (process_path(x1), process_path(x2), y),
     #             num_parallel_calls=tf.data.AUTOTUNE)
 
-    ds = ds.map(lambda slt, cnt: (resize_and_rescale(slt), resize_and_rescale(cnt)),
+    ds = ds.map(lambda slt, cnt, y: (resize_and_rescale(slt), resize_and_rescale(cnt), y),
                 num_parallel_calls=tf.data.AUTOTUNE)
 
     ds = ds.cache()
@@ -130,7 +129,7 @@ def prepare(ds, shuffle=False):
 
 
 dscLoss = tf.keras.losses.BinaryCrossentropy()
-cntLoss = tf.keras.losses.MeanAbsoluteError()
+stlLoss = tf.keras.losses.MeanAbsoluteError()
 
 def add_cnt_loss(dis_loss, gen_loss):
     return dis_loss + config.LAMBDAC*gen_loss
@@ -143,24 +142,25 @@ def genLoss(dss_loss, dsc_loss, gen_loss):
     gan_beta = config.GAN_BETA
     one = 1
 
-    tot_loss = gan_alpha*(gan_beta*dss_loss+(one-gan_beta)*dsc_loss)+(one-gan_alpha)*gen_loss
-    return tot_loss
+    tot_loss = tf.cast(dss_loss, dtype=tf.float32) + dsc_loss + 0.5*gen_loss
+    #tot_loss = gan_alpha*(gan_beta*dss_loss+(one-gan_beta)*dsc_loss)+(one-gan_alpha)*gen_loss
+    return tf.cast(tot_loss, dtype=tf.float32)
 
 @tf.function
-def train_step(cnt_in, style_in):
+def train_step(style_in, cnt_in, stly):
     with tf.GradientTape() as gen_tape:
         gen_img = gen_model([cnt_in, style_in])
         cnt_vec, gen_vec = cnt_base_model(cnt_in), cnt_base_model(gen_img)
-        stl_vec, gen_vec1 = stl_base_model(style_in), stl_base_model(gen_img)
+        gen_vec1 = stl_base_model(gen_img)
         
         cnt_loss = pairWiseRankingLoss(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
-        stl_loss = stlLoss(stl_vec, gen_vec1)
-        gen_loss = cntLoss(cnt_in, gen_img)
+        stl_loss = stlLoss(gen_vec1, stly)
+        gen_loss = stlLoss(cnt_in, gen_img)
         total_loss = genLoss(stl_loss,cnt_loss, gen_loss)
 
     grads = gen_tape.gradient(total_loss, gen_model.trainable_variables)
     opt.apply_gradients(zip(grads, gen_model.trainable_variables))
-    stl_metrics.update_state(stl_vec, gen_vec1)
+    stl_metrics.update_state(gen_vec1, stly)
     cnt_metrics.update_state(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
     return total_loss, gen_loss, cnt_loss, stl_loss
 
@@ -220,8 +220,8 @@ def train(epochs=3):
         start_time = time.time()
         
         # Iterate over the batches of the dataset.
-        for step, (cnt_batch, style_batch) in enumerate(train_dataset):
-            total_loss, gen_loss, cnt_loss, stl_loss = train_step(cnt_batch, style_batch)
+        for step, (cnt_batch, style_batch, stly_batch) in enumerate(train_dataset):
+            total_loss, gen_loss, cnt_loss, stl_loss = train_step(cnt_batch, style_batch, stly_batch)
 
         # Run a validation loop at the end of each epoch.
         # for x_batch_val, y_batch_val in val_dataset:
@@ -293,23 +293,23 @@ def train(epochs=3):
 #%%
 if __name__ == "__main__":
     #load dataset
-    stenc_df = pd.read_csv('./data/data/styleU/StyleEnc.csv', index_col=0)
+    stenc_df = pd.read_csv('./data/data/style datasetU/StyleEnc.csv', index_col=0)
     train_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'train'))
     train_ds = tf.data.Dataset.from_generator(
         train_gen,
         output_signature=(
             tf.TensorSpec(shape=(128,128, 3), dtype=tf.float32),
-            tf.TensorSpec(shape=(128,128,3), dtype=tf.float32)
-            #tf.TensorSpec(shape=(), dtype=tf.int32)
+            tf.TensorSpec(shape=(128,128,3), dtype=tf.float32),
+            tf.TensorSpec(shape=(), dtype=tf.int32)
         )
 
     )
     train_dataset = prepare(train_ds, shuffle=True)
 
-    cnt_model_dir = "./data/models/descc_wgt1.h5"
-    stl_model_dir = "./data/models/dess_m6.h5"
-    #stl_base_model = define_stl_encoder(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
-    stl_base_model = load_model(stl_model_dir)
+    cnt_model_dir = "./data/models/descc_wgt2.h5"
+    stl_model_dir = "./data/models/descs_wgt2.h5"
+    stl_base_model = define_stl_regressor(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
+    #stl_base_model.load_weights(stl_model_dir)
     cnt_base_model = define_cnt_encoder(config.DESCC_LATENT_SIZE, config.IMAGE_SHAPE)
     cnt_base_model.load_weights(cnt_model_dir)
 
