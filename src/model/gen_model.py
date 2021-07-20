@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal, HeUniform
 from tensorflow.keras.models import Model
+from tensorflow_addons.layers import InstanceNormalization
 from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Reshape, Conv2DTranspose, LeakyReLU, Activation, Dropout, BatchNormalization, LeakyReLU, GlobalMaxPool2D, Concatenate, ReLU, AveragePooling2D
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
@@ -17,8 +18,8 @@ def define_generator(cnt_model, stl_model, image_shape):
     for layer in cnt_model.layers:
         layer.trainable = False
     
-    for layer in stl_model.layers:
-        layer.trainable = False
+    # for layer in stl_model.layers:
+    #     layer.trainable = False
 
     init = RandomNormal(stddev=0.02)
 
@@ -52,12 +53,12 @@ def define_generator(cnt_model, stl_model, image_shape):
     #size:32
     g = Conv2DTranspose(128, (4, 4), strides=(2,2), padding='same', kernel_initializer=init, name='dec5_ConvT')(g)
     g = BatchNormalization(name='dec5_norm')(g, training=True)
-    #g = Concatenate(name='dec5_concat')([g, cnt_model.get_layer('CntEnc2_relu').output])
+    g = Concatenate(name='dec5_concat')([g, cnt_model.get_layer('CntEnc2_relu').output])
     g = ReLU(name='dec5_relu')(g)
     #size:64
     g = Conv2DTranspose(64, (4, 4), strides=(2,2), padding='same', kernel_initializer=init, name='dec6_ConvT')(g)
     g = BatchNormalization(name='dec6_norm')(g, training=True)
-    #g = Concatenate(name='dec6_concat')([g, cnt_model.get_layer('CntEnc1_relu').output])
+    g = Concatenate(name='dec6_concat')([g, cnt_model.get_layer('CntEnc1_relu').output])
     g = ReLU(name='dec6_relu')(g)
     #size:128
     g = Conv2DTranspose(3, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='dec7_ConvT')(g)

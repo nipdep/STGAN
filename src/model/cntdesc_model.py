@@ -36,7 +36,7 @@ def define_cnt_encoder(latent_size, image_shape=(128, 128, 3)):
     d = BatchNormalization(name='CntEnc6_norm')(d, training=True)
     d = LeakyReLU(alpha=0.2, name='CntEnc6_relu')(d)
     #output
-    pool = GlobalMaxPool2D(name='output')(d)
+    pool = GlobalMaxPool2D(name='cnt_pool')(d)
     output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='CntL2_norm')(pool)
     #define model
     model = Model(inputs=img_in, outputs=output, name='content_base_encoder')
