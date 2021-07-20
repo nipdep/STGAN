@@ -5,16 +5,14 @@ import tensorflow_addons as tfa
 from datetime import datetime
 
 import config
-from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_classifier
+from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_regressor
 
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, Adamax, SGD
 from tensorflow.keras.losses import Hinge
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras import Model
 
-
 #%%
-
 bt = 16
 
 def prep_fn(img):
@@ -23,15 +21,16 @@ def prep_fn(img):
     return img
 
 datagen = ImageDataGenerator(
-    rotation_range=40,
-    width_shift_range=0.4,
-    height_shift_range=0.5,
-    brightness_range=(0.4, 0.7),
-    shear_range=0.2,
-    zoom_range=(0.5,0.5),
+    rotation_range=30,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    #brightness_range=(0.4, 0.7),
+    #shear_range=0.2,
+    zoom_range=(0.1,0.1),
     horizontal_flip=True,
-    vertical_flip=True,
-    preprocessing_function=prep_fn,
+    vertical_flip=False,
+    #rescale=1/255.,
+    preprocessing_function=tf.keras.applications.densenet.preprocess_input,
     validation_split=0.1
 )
 
@@ -43,8 +42,7 @@ train_dt = datagen.flow_from_directory(
     batch_size=bt,
     shuffle=True,
     seed=114,
-    subset='training',
-    interpolation='lanczos'
+    subset='training'
 )
 
 val_dt = datagen.flow_from_directory(
@@ -55,19 +53,18 @@ val_dt = datagen.flow_from_directory(
     batch_size=bt,
     shuffle=False,
     seed=114,
-    subset='validation',
-    interpolation='lanczos'
+    subset='validation'
 )
 
 STEP_SIZE_TRAIN=train_dt.n//train_dt.batch_size
 STEP_SIZE_VALID=val_dt.n//val_dt.batch_size
 
 #%%
-lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-3, 200, 1e-5, 2)
-base_model = define_stl_classifier(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
+lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-4, 75, 1e-5, 2)
+base_model = define_stl_regressor(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
 base_model.compile(
     optimizer=Adam(lr_fn),
-    loss=tf.keras.losses.MeanSquaredError(),
+    loss=tf.keras.losses.MeanAbsoluteError(),
     metrics=[tf.keras.metrics.MeanAbsoluteError()]
 )
 
@@ -86,5 +83,22 @@ history = base_model.fit(
 
 #%%
 
-base_model.save('./data/models/dess_m6.h5')
+base_model.save('./data/models/dess_m005.h5')
+# %%
+from matplotlib import pyplot as plt
+plt.plot(history.history['mean_absolute_error'])
+plt.plot(history.history['val_mean_absolute_error'])
+plt.title('model accuracy')
+plt.ylabel('mean absolute error')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+# %%
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
 # %%

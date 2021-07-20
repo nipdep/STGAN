@@ -54,7 +54,7 @@ def process_path(file_path):
     return img
 
 def train_gen():
-    lower, higher, root_path, n = 1, 2923, './data/data/StyleDataset', 2900
+    lower, higher, root_path, n = 1, 3045, './data/data/style datasetU/data', 2900
     idx = np.array(range(lower, min(higher, lower+n)))
     for i in idx:
         #i = random.randint(lower, higher)
@@ -81,7 +81,7 @@ def train_gen():
             continue
 
 def val_gen():
-    lower, higher, root_path, n = 2923, 3164, './data/data/StyleDataset', 200
+    lower, higher, root_path, n = 1, 3045, './data/data/style datasetU/data', 200
     # idx = np.random.choice(range(lower, higher), n, replace=False, seed=111)
     # for i in idx:
     idx = np.array(range(lower, min(higher, lower+n)))
@@ -112,13 +112,13 @@ def val_gen():
 # image resize and rescale pipeline
 resize_and_rescale = tf.keras.Sequential([
     prep.Resizing(config.IMG_HEIGHT, config.IMG_WIDTH),
-    prep.Rescaling(scale=1./127.5, offset=-1)
+    prep.Normalization()
 ])
 
 # image augmentation pipeline
 data_augmentation = tf.keras.Sequential([
     prep.RandomContrast(0.2),
-    prep.RandomFlip("horizontal_and_vertical"),
+    prep.RandomFlip("horizontal"),
     prep.RandomCrop(config.IMG_HEIGHT, config.IMG_WIDTH),
     prep.RandomRotation(0.3, fill_mode='nearest', interpolation='bilinear'),
     prep.RandomZoom(height_factor=(-0.2, 0.2), width_factor=(-0.2, 0.2), fill_mode='nearest', interpolation='bilinear')
@@ -207,7 +207,7 @@ def train(epochs=3):
 #%%
 if __name__ == "__main__":
     #data importing
-    stenc_df = pd.read_csv('./data/data/StyleDataset/StyleEnc.csv', index_col=0)
+    stenc_df = pd.read_csv('./data/data/style datasetU/StyleEnc.csv', index_col=0)
     train_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'train'))
     val_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'validation'))
     #train_gen = gen(1, 2923, './data/data/StyleDataset', 2900)
@@ -249,9 +249,10 @@ if __name__ == "__main__":
 
     train(config.DESCS_EPOCHS)
     # tf.profiler.experimental.client.trace('grpc://localhost:6009',
-    #                                   config.LOG_DIR+'/profilers', 2000)
-    filename = 'descs_wgt1.h5'
-    base_model.save_weights(os.path.join(config.MODEL_DIR, filename))
-    logger.info(f">> Saved : {filename}  ")
+    #         
+#%%                          config.LOG_DIR+'/profilers', 2000)
+filename = 'descs_wgt2.h5'
+base_model.save_weights(os.path.join(config.MODEL_DIR, filename))
+logger.info(f">> Saved : {filename}  ")
 
 # %%

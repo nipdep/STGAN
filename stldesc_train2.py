@@ -113,7 +113,7 @@ def val_gen():
 # image resize and rescale pipeline
 resize_and_rescale = tf.keras.Sequential([
     prep.Resizing(config.IMG_HEIGHT, config.IMG_WIDTH),
-    prep.Rescaling(scale=1./127.5, offset=-1)
+    prep.Normalization()
 ])
 
 # image augmentation pipeline
