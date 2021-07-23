@@ -107,7 +107,7 @@ def define_gan(g_model, dc_model, ds_model, image_shape=(128, 128, 3)):
     
     for layer in ds_model.layers:
         if not isinstance(layer, BatchNormalization):
-            layer.trainable = False
+            layer.trainable = True
     # input layer for GAN model
     cnt_img = Input(shape=image_shape)
     style_img = Input(shape=image_shape)
