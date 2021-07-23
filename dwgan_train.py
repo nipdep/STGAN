@@ -6,6 +6,7 @@ import config
 #from src.model.gan_model import define_cnt_descriminator, define_gan, defing_generator
 #from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
 from src.model.dwn_gan_model import define_cnt_descriminator, define_gan, define_generator, StyleNet, define_mlt_desc_model
+from src.support.loss_functions import pairWiseRankingLoss
 
 import os 
 import logging
@@ -38,29 +39,24 @@ logdir = config.LOG_DIR+ "/gan_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1, write_graph=True)
 run_opts = tf.compat.v1.RunOptions(report_tensor_allocations_upon_oom = True)
 #tf.profiler.experimental.server.start(6009)
-def pairWiseRankingLoss(y_ref, y_style, label):
-    m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    y = tf.cast(label, dtype=tf.float32)
-    dist = tf.abs(tf.keras.losses.cosine_similarity(y_ref,y_style))
-    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
-    return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
+# def pairWiseRankingLoss(y_ref, y_style, label):
+#     m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     y = tf.cast(label, dtype=tf.float32)
+#     dist = tf.abs(tf.keras.losses.cosine_similarity(y_ref,y_style))
+#     loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
+#     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
 
-def SM_SSIMLoss(ref_img, gen_img):
-    one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
-    two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
-    rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
-    rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
-    loss = tf.image.ssim_multiscale(ref_img, gen_img, max_val=2, filter_size=3)
-    return tf.reduce_mean(loss)
+# def SM_SSIMLoss(ref_img, gen_img):
+#     one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
+#     two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
+#     rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
+#     rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
+#     loss = tf.image.ssim_multiscale(ref_img, gen_img, max_val=2, filter_size=3)
+#     return tf.reduce_mean(loss)
 
-dscLoss = tf.keras.losses.BinaryCrossentropy()
-cntLoss = tf.keras.losses.KLDivergence()
 
-gen_opt = tf.keras.optimizers.Adam(lr=0.002)
-ds_opt = tf.keras.optimizers.Adam(lr=0.002)
-dc_opt = tf.keras.optimizers.Adam(lr=0.002)
 #optimizer = tf.train.AdamOptimizer(learning_rate).minimize(-1 * loss_rec)
 
 def genLoss(dss_loss, dsc_loss, gen_loss):
@@ -71,8 +67,8 @@ def genLoss(dss_loss, dsc_loss, gen_loss):
     tot_loss = gan_alpha*(gan_beta*dss_loss+(one-gan_beta)*dsc_loss)+(one-gan_alpha)*gen_loss
     return tot_loss
 
-def propLoss(gen_loss, style_loss, beta):
-    total_loss = (1-beta)*gen_loss + beta*style_loss
+def propLoss(gen_loss, style_loss, cnt_loss, beta):
+    total_loss = (1-beta)*gen_loss + + beta*style_loss + beta*cnt_loss
     return total_loss
 
 def add_cnt_loss(dis_loss, gen_loss):
@@ -97,11 +93,11 @@ def train_step(cnt_in, style_in, cnt_fake, style_fake, Xds_stl, Xds_trn, yds, Xd
 
         total_style_loss = add_style_loss(ds_loss, dss_loss)
         total_cnt_loss = add_cnt_loss(dc_loss, dsc_loss)
-        #total_gen_loss = propLoss(gen_loss, dss_loss, beta)
+        total_gen_loss = propLoss(gen_loss, dss_loss, 0.6)  #Parameter Tuning
 
-    generator_grads = gen_tape.gradient(gen_loss, g_model.trainable_variables)
-    cnt_disc_grads = discc_tape.gradient(total_cnt_loss, dc_model.trainable_variables)
-    style_disc_grads = discs_tape.gradient(total_style_loss, ds_base_model.trainable_variables)
+    generator_grads = gen_tape.gradient(total_gen_loss, g_model.trainable_variables)
+    cnt_disc_grads = discc_tape.gradient(dc_loss, dc_model.trainable_variables)
+    style_disc_grads = discs_tape.gradient(ds_loss, ds_base_model.trainable_variables)
 
     gen_opt.apply_gradients(zip(generator_grads, g_model.trainable_variables))
     dc_opt.apply_gradients(zip(cnt_disc_grads, dc_model.trainable_variables))
@@ -239,6 +235,13 @@ if __name__ == "__main__":
     ds_model = StyleNet(ds_base_model)
     g_model = define_generator(ds_base_model, config.GAN_LATENT_SIZE, config.IMAGE_SHAPE)
     gan_model = define_gan(g_model, dc_model, ds_model)
+
+    dscLoss = tf.keras.losses.BinaryCrossentropy()
+    cntLoss = tf.keras.losses.KLDivergence()
+
+    gen_opt = tf.keras.optimizers.Adam(lr=0.002)
+    ds_opt = tf.keras.optimizers.Adam(lr=0.002)
+    dc_opt = tf.keras.optimizers.Adam(lr=0.002)
 
     #train model
     train(g_model, dataset, config.GAN_EPOCHS, config.GAN_BATCH_SIZE)
