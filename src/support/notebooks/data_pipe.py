@@ -16,12 +16,12 @@ style_enc_file = '../../../data/data/Desc_dataset/style_enc.csv' #config params
 # ## rename files by giving style index
 
 # %%
-root_path = pathlib.Path('../../../data/data/styleU')
+root_path = pathlib.Path('../../../data/data/style datasetU/data')
 idxs = []
 styles = []
 style_enc = {}
 n = 1
-m = 10000
+m = 100000
 for folder in root_path.glob('*'):
     for file in folder.glob('*'):
         m += 1
@@ -133,8 +133,8 @@ for f in sample_ds.take(num):
 
 
 # %%
-dt_path = "../../../data/data/styleU"
-style_enc_file = "../../../data/data/styleU/StyleEnc.csv"
+dt_path = "../../../data/data/style datasetU/data"
+style_enc_file = "../../../data/data/style datasetU/StyleEnc.csv"
 root_path = pathlib.Path(dt_path)
 idxs = []
 styles = []
@@ -168,4 +168,14 @@ df.shape[0]
 l =df.loc[1,['path', 'style_code']]
 # %%
 l['path']
+# %%
+import cv2
+def image_resizer(in_path, out_path, pic_size):
+    pic = cv2.imread(in_path)
+    #cv2.imshow("image", pic)
+    pic = cv2.resize(pic, pic_size, interpolation=cv2.INTER_LANCZOS4)
+    cv2.imwrite(out_path, pic)
+
+
+
 # %%

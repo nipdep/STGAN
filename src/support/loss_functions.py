@@ -10,15 +10,15 @@ from sklearn.model_selection import KFold
 from scipy import interpolate
 import config
 #%%
-def pairWiseRankingLoss(y_ref, y_style, label):
-    m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    w = tf.cast(tf.broadcast_to(2, shape=[y_ref.shape[0], ]), dtype=tf.float32)
-    y = tf.cast(label, dtype=tf.float32)
-    dist = tf.divide(tf.abs(tf.keras.losses.cosine_similarity(y_ref,y_style)+i), w)
-    loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
-    return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
+# def pairWiseRankingLoss(y_ref, y_style, label):
+#     m  = tf.cast(tf.broadcast_to(config.LOSS_THD, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     u  = tf.cast(tf.broadcast_to(0, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     i  = tf.cast(tf.broadcast_to(1, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     w = tf.cast(tf.broadcast_to(2, shape=[y_ref.shape[0], ]), dtype=tf.float32)
+#     y = tf.cast(label, dtype=tf.float32)
+#     dist = tf.divide(tf.abs(tf.keras.losses.cosine_similarity(y_ref,y_style)+i), w)
+#     loss = tf.math.multiply(y,dist) + tf.math.multiply((i-y),tf.reduce_max(tf.stack([u,m-dist]), axis=0))
+#     return tf.cast(tf.reduce_mean(loss), dtype=tf.float32)
     
 
 class MarginalAcc(tf.keras.metrics.Metric):
@@ -41,6 +41,14 @@ class MarginalAcc(tf.keras.metrics.Metric):
 
 
 #%%
+# def SM_SSIMLoss(ref_img, gen_img):
+#     one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
+#     two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
+#     rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
+#     rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
+#     loss = tf.image.ssim_multiscale(ref_img, gen_img, max_val=2, filter_size=3)
+#     return tf.reduce_mean(loss)
+
 def SM_SSIMLoss(ref_img, gen_img):
     one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
     two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
@@ -48,6 +56,17 @@ def SM_SSIMLoss(ref_img, gen_img):
     rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
     loss = tf.image.ssim_multiscale(ref_img, gen_img, max_val=2, filter_size=3)
     return tf.reduce_mean(loss)
+
+def mixLoss(ref_img, gen_img):
+    one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
+    two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
+    rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
+    rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
+    l1_loss = tf.norm(ref_img-gen_img, ord=1, axis=0)/ref_img.shape[0]
+    ms_ssim_loss = tf.reduce_mean(tf.image.ssim_multiscale(rescaled_ref_img, rescaled_gen_img, max_val=1, filter_size=3))
+    alpha = tf.cast(config.GEN_LOSS_ALPHA, dtype=tf.float32)
+    total_loss = alpha*ms_ssim_loss + (1-alpha)*l1_loss
+    return tf.cast(total_loss, dtype=tf.float32)
 
 def pairwise_distance(feature, squared=False):
     """Computes the pairwise distance matrix with numerical stability.
