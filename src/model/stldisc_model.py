@@ -14,6 +14,63 @@ from tensorflow.keras import metrics
 from tensorflow.python.keras.layers.pooling import GlobalAveragePooling2D
 #import config
 #%%
+# # TODO: [conv overlapping model]//layers and width parameter tune
+# def define_descrminator(image_size):
+#     init = RandomNormal(stddev=0.02)
+#     input_img = Input(shape=image_size)
+#     # C64
+#     d = Conv2D(64, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(input_img)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C128
+#     d = Conv2D(128, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C256
+#     d = Conv2D(256, (4, 4), (2, 2), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+#     # flatten
+#     flt = Flatten()(d)
+#     # linear logits layer
+#     output = Dense(1)(flt)
+#     #build and compile the model
+#     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
+#     return model
+
+# # TODO: [conv non-overlapping model]//layers and width parameter tune
+# def define_descrminator(image_size):
+#     init = RandomNormal(stddev=0.02)
+#     input_img = Input(shape=image_size)
+#     # C64
+#     d = Conv2D(64, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(input_img)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C128
+#     d = Conv2D(128, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C256
+#     d = Conv2D(256, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+#     # flatten
+#     flt = Flatten()(d)
+#     # linear logits layer
+#     output = Dense(1)(flt)
+#     #build and compile the model
+#     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
+#     return model
+
+# def define_style_descrminator(output_size,image_shape):
+#     vgg16_feature_net = tf.keras.applications.VGG16(include_top=False, input_shape=image_shape)
+#     for layer in vgg16_feature_net.layers:
+#         layer.trainable = False
+#     feature_map = vgg16_feature_net.output
+#     x = GlobalMaxPool2D()(feature_map)
+#     x = Dropout(rate=0.5)(x)
+#     x = Dense(512, activation='relu')(x)
+#     logits = Dense(output_size, use_bias=False)(x)
+#     model = Model(inputs=vgg16_feature_net.input, outputs=logits)
+#     return model
 
 def WaveletTransformAxisY(batch_img):
     odd_img  = batch_img[:,0::2]
@@ -136,156 +193,120 @@ def Wavelet_out_shape(input_shapes):
     return [tuple([None, 112, 112, 12]), tuple([None, 56, 56, 12]), 
             tuple([None, 28, 28, 12]), tuple([None, 14, 14, 12])]
 
-def define_desc_encoder(latent_size, image_shape=(128, 128, 3)):
-    style_image = Input(shape=image_shape, name='style_image')
-    # wavelet transform style_image
+#%%
+
+# def define_style_descriminator(image_size=(128, 128, 3)):
+#     init = RandomNormal(stddev=0.02)
+#     input_img = Input(shape=image_size)
+#     # C64
+#     d = Conv2D(64, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(input_img)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C128
+#     d = Conv2D(128, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+# 	# C256
+#     d = Conv2D(256, (4, 4), (4, 4), padding='SAME', kernel_initializer=init)(d)
+#     d = BatchNormalization()(d)
+#     d = LeakyReLU(alpha=0.2)(d)
+#     # flatten
+#     flt = Flatten()(d)
+#     # linear logits layer
+#     output = Dense(1)(flt)
+#     #build and compile the model
+#     model = Model(inputs=input_img, outputs=output, name='style_descriminator')
+#     return model
+
+def define_style_descriminator(latent_size,input_shape=(128, 128, 3)):
+
+    #input_shape = 224, 224, 3
+
+    input_ = Input(input_shape, name='the_input')
+    # wavelet = Lambda(Wavelet, name='wavelet')
     wavelet = Lambda(Wavelet, Wavelet_out_shape, name='wavelet')
-    input_l1, input_l2, input_l3, input_l4 = wavelet(style_image)
+    input_l1, input_l2, input_l3, input_l4 = wavelet(input_)
     # print(input_l1)
     # print(input_l2)
     # print(input_l3)
     # print(input_l4)
-
-    ## wavelet trasform style extraction head
     # level one decomposition starts
     conv_1 = Conv2D(64, kernel_size=(3, 3), padding='same', name='conv_1')(input_l1)
-    norm_1 = InstanceNormalization(name='norm_1')(conv_1)
+    norm_1 = BatchNormalization(name='norm_1')(conv_1)
     relu_1 = Activation('relu', name='relu_1')(norm_1)
 
     conv_1_2 = Conv2D(64, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_1_2')(relu_1)
-    norm_1_2 = InstanceNormalization(name='norm_1_2')(conv_1_2)
+    norm_1_2 = BatchNormalization(name='norm_1_2')(conv_1_2)
     relu_1_2 = Activation('relu', name='relu_1_2')(norm_1_2)
 
     # level two decomposition starts
     conv_a = Conv2D(filters=64, kernel_size=(3, 3), padding='same', name='conv_a')(input_l2)
-    norm_a = InstanceNormalization(name='norm_a')(conv_a)
+    norm_a = BatchNormalization(name='norm_a')(conv_a)
     relu_a = Activation('relu', name='relu_a')(norm_a)
 
     # concate level one and level two decomposition
     concate_level_2 = Concatenate()([relu_1_2, relu_a])
     conv_2 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_2')(concate_level_2)
-    norm_2 = InstanceNormalization(name='norm_2')(conv_2)
+    norm_2 = BatchNormalization(name='norm_2')(conv_2)
     relu_2 = Activation('relu', name='relu_2')(norm_2)
 
     conv_2_2 = Conv2D(128, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_2_2')(relu_2)
-    norm_2_2 = InstanceNormalization(name='norm_2_2')(conv_2_2)
+    norm_2_2 = BatchNormalization(name='norm_2_2')(conv_2_2)
     relu_2_2 = Activation('relu', name='relu_2_2')(norm_2_2)
 
     # level three decomposition starts 
     conv_b = Conv2D(filters=64, kernel_size=(3, 3), padding='same', name='conv_b')(input_l3)
-    norm_b = InstanceNormalization(name='norm_b')(conv_b)
+    norm_b = BatchNormalization(name='norm_b')(conv_b)
     relu_b = Activation('relu', name='relu_b')(norm_b)
 
     conv_b_2 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_b_2')(relu_b)
-    norm_b_2 = InstanceNormalization(name='norm_b_2')(conv_b_2)
+    norm_b_2 = BatchNormalization(name='norm_b_2')(conv_b_2)
     relu_b_2 = Activation('relu', name='relu_b_2')(norm_b_2)
 
     # concate level two and level three decomposition 
     concate_level_3 = Concatenate()([relu_2_2, relu_b_2])
     conv_3 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_3')(concate_level_3)
-    norm_3 = InstanceNormalization(name='norm_3')(conv_3)
+    norm_3 = BatchNormalization(name='nomr_3')(conv_3)
     relu_3 = Activation('relu', name='relu_3')(norm_3)
 
     conv_3_2 = Conv2D(256, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_3_2')(relu_3)
-    norm_3_2 = InstanceNormalization(name='norm_3_2')(conv_3_2)
+    norm_3_2 = BatchNormalization(name='norm_3_2')(conv_3_2)
     relu_3_2 = Activation('relu', name='relu_3_2')(norm_3_2)
 
     # level four decomposition start
     conv_c = Conv2D(64, kernel_size=(3, 3), padding='same', name='conv_c')(input_l4)
-    norm_c = InstanceNormalization(name='norm_c')(conv_c)
+    norm_c = BatchNormalization(name='norm_c')(conv_c)
     relu_c = Activation('relu', name='relu_c')(norm_c)
 
     conv_c_2 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_c_2')(relu_c)
-    norm_c_2 = InstanceNormalization(name='norm_c_2')(conv_c_2)
+    norm_c_2 = BatchNormalization(name='norm_c_2')(conv_c_2)
     relu_c_2 = Activation('relu', name='relu_c_2')(norm_c_2)
 
     conv_c_3 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_c_3')(relu_c_2)
-    norm_c_3 = InstanceNormalization(name='norm_c_3')(conv_c_3)
+    norm_c_3 = BatchNormalization(name='norm_c_3')(conv_c_3)
     relu_c_3 = Activation('relu', name='relu_c_3')(norm_c_3)
 
     # concate level level three and level four decomposition
     concate_level_4 = Concatenate()([relu_3_2, relu_c_3])
     conv_4 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_4')(concate_level_4)
-    norm_4 = InstanceNormalization(name='norm_4')(conv_4)
+    norm_4 = BatchNormalization(name='norm_4')(conv_4)
     relu_4 = Activation('relu', name='relu_4')(norm_4)
 
     conv_4_2 = Conv2D(256, kernel_size=(3, 3), strides=(2, 2), padding='same', name='conv_4_2')(relu_4)
-    norm_4_2 = InstanceNormalization(name='norm_4_2')(conv_4_2)
+    norm_4_2 = BatchNormalization(name='norm_4_2')(conv_4_2)
     relu_4_2 = Activation('relu', name='relu_4_2')(norm_4_2)
 
-    conv_5_1 = Conv2D(256, kernel_size=(3, 3), padding='same', name='conv_5_1')(relu_4_2)
-    norm_5_1 = InstanceNormalization(name='norm_5_1')(conv_5_1)
+    conv_5_1 = Conv2D(128, kernel_size=(3, 3), padding='same', name='conv_5_1')(relu_4_2)
+    norm_5_1 = BatchNormalization(name='norm_5_1')(conv_5_1)
     relu_5_1 = Activation('relu', name='relu_5_1')(norm_5_1)
 
-    conv_5_2 = Conv2D(latent_size, kernel_size=(3, 3), padding='same', name='conv_5_2')(relu_5_1)
-    norm_5_2 = InstanceNormalization(name='norm_5_2')(conv_5_2)
-    relu_5_2 = Activation('relu', name='relu_5_2')(norm_5_2)
+    pool_5_1 = AveragePooling2D(pool_size=(7, 7), strides=1, padding='same', name='avg_pool_5_1')(relu_5_1)
+    flat_5_1 = GlobalAveragePooling2D(name='flat_5_1')(pool_5_1) 
+    dense_1 = Dense(latent_size, name='latent_layer')(flat_5_1)
 
-    pool = GlobalMaxPool2D(name='pool_logits')(relu_5_2)
-    logits = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='l2_norm')(pool)
-    model = Model(inputs=style_image, outputs=logits)
+    output =  Lambda(lambda x:tf.math.l2_normalize(x, axis=-1), name='StlL2_norm')(dense_1)
+    model = Model(inputs=input_, outputs=output)
     return model
 
-#%%
-def define_stl_encoder(latent_size, image_shape=(128, 128, 3)):
-    #content image input
-    img_in = Input(shape=image_shape, name='Stl_Input')
-    # c64
-    d = Conv2D(64, (5, 5), strides=(2,2), padding='same', name='StlEnc1_Conv')(img_in)
-    d = LeakyReLU(alpha=0.2, name='StlEnc1_relu')(d)
-    # c128
-    d = Conv2D(128, (5, 5), strides=(2,2), padding='same', name='StlEnc2_Conv')(d)
-    d = BatchNormalization(name='StlEnc2_norm')(d, training=True)
-    d = LeakyReLU(alpha=0.2, name='StlEnc2_relu')(d)
-    # c256
-    d = Conv2D(256, (3, 3), strides=(2,2), padding='same', name='StlEnc3_Conv')(d)
-    d = BatchNormalization(name='StlEnc3_norm')(d, training=True)
-    d = LeakyReLU(alpha=0.2, name='StlEnc3_relu')(d)
-    # c512
-    d = Conv2D(512, (3, 3), strides=(2,2), padding='same', name='StlEnc4_Conv')(d)
-    d = BatchNormalization(name='StlEnc4_norm')(d, training=True)
-    d = LeakyReLU(alpha=0.2, name='StlEnc4_relu')(d)
-    # c512
-    d = Conv2D(512, (3, 3), strides=(2,2), padding='same', name='StlEnc5_Conv')(d)
-    d = BatchNormalization(name='StlEnc5_norm')(d, training=True)
-    d = LeakyReLU(alpha=0.2, name='StlEnc5_relu')(d)
-    # c-latent size
-    d = Conv2D(latent_size, (3, 3), strides=(2,2), padding='same', name='StlEnc6_Conv')(d)
-    d = BatchNormalization(name='StlEnc6_norm')(d, training=True)
-    d = LeakyReLU(alpha=0.2, name='StlEnc6_relu')(d)
-    #output
-    pool = GlobalMaxPool2D(name='stldisc_output')(d)
-    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='l2_norm')(pool)
-    #define model
-    model = Model(inputs=img_in, outputs=output, name='style_base_encoder')
-    return model
-
-#%%
-
-def define_stl_emb_encoder(latent_size, n_classes, image_shape):
-    idx = Input(shape=(), name='index_input')
-    emb_layer = tf.keras.layers.Embedding(n_classes, 32, name="embedding")
-    feat_model = tf.keras.applications.ResNet101V2(include_top=False, input_shape=image_shape)
-    t = False
-    for layer in feat_model.layers:
-        if layer.name == "conv5_block3_1_conv":
-            t = True
-        layer.trainable = t
-    x = feat_model.output
-    x = GlobalAveragePooling2D(name='pool')(x)
-    x = Dropout(0.3, name='dropout')(x)
-    x = Dense(latent_size, activation='relu')(x)
-    enc_out = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='StlL2_norm')(x)
-    y = emb_layer(idx)
-    dist = Subtract(name="subs")([enc_out, y])
-
-    model = Model(inputs=[feat_model.input,idx], outputs=dist, name='style_base_encoder')
-    return model
-#%%
-# gen_model = define_stl_encoder(32, 36, (128, 128, 3))
-#gen_model.summary()
-# tf.keras.utils.plot_model(gen_model, show_shapes=True)
-#%%
 class StyleNet(tf.keras.Model):
 
     def __init__(self, base_model):
@@ -298,7 +319,7 @@ class StyleNet(tf.keras.Model):
         with tf.name_scope("Style") as scope:
             ft1 = self._model(ref_img)
             #ft1 = tf.math.l2_normalize(ft1, axis=-1)
-        with tf.name_scope("STransfer") as scope:
+        with tf.name_scope("Transfer") as scope:
             ft2 = self._model(trans_img)
             #ft2 = tf.math.l2_normalize(ft2, axis=-1)
         return [ft1, ft2]
@@ -306,123 +327,3 @@ class StyleNet(tf.keras.Model):
     @tf.function
     def get_features(self, inputs):
         return tf.math.l2_normalize(self._model(inputs), axis=-1)
-
-# gs_model = define_desc_encoder(64)
-# CntNet = StyleNet(gs_model)
-# tf.keras.utils.plot_model(gs_model, show_shapes=True)
-
-#base_model = define_style_descrminator(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
-
-# %%
-
-def define_stl_regressor(latent_size, image_size=(128, 128, 3)):
-    feat_model = tf.keras.applications.densenet.DenseNet121(weights='imagenet', include_top=False, input_shape=image_size)
-    t = True
-    for layer in feat_model.layers:
-        # if layer.name == "conv5_block16_0_bn":
-        #     t = True 
-        layer.trainable=t
-    x = feat_model.output
-    # x = Conv2D(1024, (3, 3), (2, 2), padding='same', name='stlreg_c512')(x)
-    # x = Conv2D(latent_size, (3, 3), (2, 2), padding='same', name='stlreg_latent_ly')(x)
-    # x = Conv2D(1, (3, 3), (2, 2), padding='same', name='stlreg_c1')(x)
-    # output = Reshape((1,), name='stlreg_output')(x)
-    x = GlobalMaxPool2D(name='pool')(x)
-    #x = Dense(512, activation='relu')(x)
-    #x = Dropout(rate=0.3, name='stl_dropout')(x)
-    x = Dense(latent_size, activation='relu', name='latent_layer')(x)
-    output = Dense(1, use_bias=False, name='output')(x)
-
-    model = Model(inputs=feat_model.input, outputs=output, name='style_classifier')
-    return model
-
-# sr_model = define_stl_regressor(32)
-# # CntNet = StyleNet(gs_model)
-# tf.keras.utils.plot_model(sr_model, show_shapes=True)
-#%%
-def define_stl_classifier(latent_size, image_size=(128, 128, 3)):
-    feat_model = tf.keras.applications.densenet.DenseNet121(weights='imagenet', include_top=False, input_shape=image_size)
-    t = False
-    for layer in feat_model.layers:
-        # if layer.name == "conv5_block3_1_conv":
-        #     t = True
-        layer.trainable = True
-    x = feat_model.output
-    # x = Conv2D(1024, (3, 3), (2, 2), padding='same', name='stlreg_c512')(x)
-    # x = Conv2D(latent_size, (3, 3), (2, 2), padding='same', name='stlreg_latent_ly')(x)
-    # x = Conv2D(12, (3, 3), (2, 2), padding='same', name='stlreg_c1')(x)
-    # x = Reshape((12,), name='stl_reshape')(x)
-    # output = Activation('softmax', name='stlreg_output')(x)
-    x = GlobalMaxPool2D(name='pool')(x)
-    x = Dropout(rate=0.2, name='stl_dropout')(x)
-    x = Dense(512, activation='relu')(x)
-    #x = Dense(512, activation='relu')(x)
-    x = Dense(latent_size, activation='relu', use_bias=True, name='latent_layer')(x)
-    output = Dense(12, activation='softmax', name='output')(x)
-
-    model = Model(inputs=feat_model.input, outputs=output, name='style_classifier')
-    return model
-
-#%%
-
-# gen_model = define_stl_classifier(32, 36, (128, 128, 3))
-# gen_model.summary()
-#tf.keras.utils.plot_model(gen_model, show_shapes=True)
-#%%
-
-class EmbStyleNet(tf.keras.Model):
-
-    def __init__(self, base_model):
-        super(EmbStyleNet, self).__init__()
-        self._model = base_model 
-
-    @tf.function
-    def call(self, inputs):
-        ref_img, style_img, ref_lbl, style_lbl = inputs
-        with tf.name_scope("RefT") as scope:
-            ft1 = self._model([ref_img, ref_lbl])
-            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
-        with tf.name_scope("RefF") as scope:
-            ft2 = self._model([ref_img, style_lbl])
-            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
-        with tf.name_scope("StyleT") as scope:
-            ft3 = self._model([style_img, style_lbl])
-            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
-        with tf.name_scope("StyleF") as scope:
-            ft4 = self._model([style_img, ref_lbl])
-            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
-        return [ft1, ft2, ft3, ft4]
-    
-    @tf.function
-    def get_features(self, inputs):
-        return tf.math.l2_normalize(self._model(inputs), axis=-1)
-
-#%%
-def stl_encoder(latent_size, image_size=(128, 128, 3)):
-    # feat_model = tf.keras.applications.densenet.DenseNet121(weights='imagenet', include_top=False, input_shape=image_size)
-    feat_model = tf.keras.applications.vgg16.VGG16(weights='imagenet', include_top=False, input_shape=image_size)
-
-    t = False
-    for layer in feat_model.layers:
-        # if layer.name == "conv5_block16_0_bn":
-        #     t = True 
-        layer.trainable=t
-    x = feat_model.output
-    # x = Conv2D(1024, (3, 3), (2, 2), padding='same', name='stlreg_c512')(x)
-    # x = Conv2D(latent_size, (3, 3), (2, 2), padding='same', name='stlreg_latent_ly')(x)
-    # x = Conv2D(1, (3, 3), (2, 2), padding='same', name='stlreg_c1')(x)
-    # output = Reshape((1,), name='stlreg_output')(x)
-    x = GlobalAveragePooling2D(name='pool')(x)
-    #x = Dense(512, activation='relu')(x)
-    #x = Dropout(rate=0.3, name='stl_dropout')(x)
-    x = Dense(latent_size, activation='relu', name='latent_layer')(x)
-    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=-1), name='StlL2_norm')(x)
-    model = Model(inputs=feat_model.input, outputs=output, name='style_enc')
-    return model
-
-# sr_model = stl_encoder(32)
-# # CntNet = StyleNet(gs_model)
-# tf.keras.utils.plot_model(sr_model, show_shapes=True)
-#%%
-
-
