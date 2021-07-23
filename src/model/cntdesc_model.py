@@ -13,6 +13,66 @@ def define_cnt_encoder(latent_size, image_shape=(128, 128, 3)):
     #content image input
     img_in = Input(shape=image_shape, name='Cnt_Input')
     # c64
+    d = Conv2D(32, (4, 4), strides=(2,2), padding='same', name='CntEnc1_Conv')(img_in)
+    d = LeakyReLU(alpha=0.2, name='CntEnc1_relu')(d)
+    # c128
+    d = Conv2D(64, (4, 4), strides=(2,2), padding='same', name='CntEnc2_Conv')(d)
+    d = BatchNormalization(name='CntEnc2_norm')(d, training=True)
+    d = LeakyReLU(alpha=0.2, name='CntEnc2_relu')(d)
+    # c256
+    d = Conv2D(128, (4, 4), strides=(2,2), padding='same', name='CntEnc3_Conv')(d)
+    d = BatchNormalization(name='CntEnc3_norm')(d, training=True)
+    d = LeakyReLU(alpha=0.2, name='CntEnc3_relu')(d)
+    # c512
+    d = Conv2D(256, (4, 4), strides=(2,2), padding='same', name='CntEnc4_Conv')(d)
+    d = BatchNormalization(name='CntEnc4_norm')(d, training=True)
+    d = LeakyReLU(alpha=0.2, name='CntEnc4_relu')(d)
+    # c512
+    d = Conv2D(256, (4, 4), strides=(2,2), padding='same', name='CntEnc5_Conv')(d)
+    d = BatchNormalization(name='CntEnc5_norm')(d, training=True)
+    d = LeakyReLU(alpha=0.2, name='CntEnc5_relu')(d)
+    # c-latent size
+    d = Conv2D(latent_size, (4, 4), strides=(2,2), padding='same', name='CntEnc6_Conv')(d)
+    d = BatchNormalization(name='CntEnc6_norm')(d, training=True)
+    d = LeakyReLU(alpha=0.2, name='CntEnc6_relu')(d)
+    #output
+    pool = GlobalMaxPool2D(name='cnt_pool')(d)
+    output = Lambda(lambda x:tf.math.l2_normalize(x, axis=1), name='CntL2_norm')(pool)
+    #define model
+    model = Model(inputs=img_in, outputs=output, name='content_base_encoder')
+    return model
+
+class ContentNet(tf.keras.Model):
+
+    def __init__(self, base_model):
+        super(ContentNet, self).__init__()
+        self._model = base_model 
+
+    @tf.function
+    def call(self, inputs):
+        cnt_img, trans_img = inputs
+        with tf.name_scope("Content") as scope:
+            ft1 = self._model(cnt_img)
+            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
+        with tf.name_scope("CTransfer") as scope:
+            ft2 = self._model(trans_img)
+            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
+        # with tf.name_scope("Diverger"):
+        #     ft3 = self._model(diff_img)
+            #ft3 = tf.math.l2_normalize(ft3, axis=-1)
+        return [ft1, ft2]
+
+
+# gc_model = define_cnt_encoder(64)
+# CntNet = ContentNet(gc_model)
+# tf.keras.utils.plot_model(gc_model, show_shapes=True)
+
+#%% 
+
+def define_cont_encoder(latent_size, image_shape=(128, 128, 3)):
+    #content image input
+    img_in = Input(shape=image_shape, name='Cnt_Input')
+    # c64
     d = Conv2D(64, (4, 4), strides=(2,2), padding='same', name='CntEnc1_Conv')(img_in)
     d = LeakyReLU(alpha=0.2, name='CntEnc1_relu')(d)
     # c128
@@ -41,30 +101,3 @@ def define_cnt_encoder(latent_size, image_shape=(128, 128, 3)):
     #define model
     model = Model(inputs=img_in, outputs=output, name='content_base_encoder')
     return model
-
-class ContentNet(tf.keras.Model):
-
-    def __init__(self, base_model):
-        super(ContentNet, self).__init__()
-        self._model = base_model 
-
-    @tf.function
-    def call(self, inputs):
-        cnt_img, trans_img, diff_img = inputs
-        with tf.name_scope("Content") as scope:
-            ft1 = self._model(cnt_img)
-            #ft1 = tf.math.l2_normalize(ft1, axis=-1)
-        with tf.name_scope("Transfer") as scope:
-            ft2 = self._model(trans_img)
-            #ft2 = tf.math.l2_normalize(ft2, axis=-1)
-        with tf.name_scope("Diverger"):
-            ft3 = self._model(diff_img)
-            #ft3 = tf.math.l2_normalize(ft3, axis=-1)
-        return [ft1, ft2, ft3]
-
-
-# gc_model = define_cnt_encoder(64)
-# # CntNet = ContentNet(gc_model)
-# tf.keras.utils.plot_model(gc_model, show_shapes=True)
-
-#%% 
