@@ -6,6 +6,7 @@ from datetime import datetime
 
 import config
 from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_classifier
+from src.model.style_mapping import mapping_model
 
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import Hinge
@@ -15,7 +16,7 @@ from tensorflow.keras import Model
 
 #%%
 
-bt = 16
+bt = 32
 
 def prep_fn(img):
     img = img.astype(np.float32) / 255.0
@@ -23,7 +24,7 @@ def prep_fn(img):
     return img
 
 datagen = ImageDataGenerator(
-    rotation_range=30,
+    rotation_range=180,
     width_shift_range=0.4,
     height_shift_range=0.5,
     #brightness_range=(0.4, 0.7),
@@ -62,12 +63,11 @@ val_dt = datagen.flow_from_directory(
 
 STEP_SIZE_TRAIN=train_dt.n//train_dt.batch_size
 STEP_SIZE_VALID=val_dt.n//val_dt.batch_size
-
 #%%
-lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-5, 200, 1e-5, 2)
-base_model = define_stl_classifier(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
+lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-4, 200, 1e-5, 2)
+base_model = mapping_model(2, 12, config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
 base_model.compile(
-    optimizer=Adam(1e-4),
+    optimizer=Adam(lr_fn),
     loss=tf.keras.losses.CategoricalCrossentropy(),
     metrics=['accuracy']
 )
@@ -78,7 +78,7 @@ base_model.compile(
 history = base_model.fit(
     train_dt,
     batch_size=bt,
-    epochs=30,
+    epochs=20,
     steps_per_epoch=STEP_SIZE_TRAIN,
     validation_data=val_dt,
     validation_steps=STEP_SIZE_VALID,
@@ -87,11 +87,11 @@ history = base_model.fit(
 
 #%%
 
-base_model.save('./data/models/dess_m006.h5')
+base_model.save('./data/models/dess_m009.h5')
 # %%
 from matplotlib import pyplot as plt
-plt.plot(history.history['mean_absolute_error'])
-plt.plot(history.history['val_mean_absolute_error'])
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
 plt.title('model accuracy')
 plt.ylabel('mean absolute error')
 plt.xlabel('epoch')
