@@ -6,7 +6,7 @@ from src.model.cntdesc_model import define_cnt_encoder, ContentNet
 from src.model.stldesc_model import define_desc_encoder, StyleNet
 from src.model.gen_model import define_generator
 from src.support.loss_functions import pairWiseRankingLoss, MarginalAcc, triplet_loss
-from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder, define_stl_regressor
+from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder, define_stl_regressor, stl_encoder
 
 #from src.model.wavelet_gan_model import define_cnt_descriminator, define_gan, define_generator
 
@@ -23,6 +23,7 @@ from numpy import load, zeros, ones
 import pathlib
 from numpy.random import randint
 from sklearn.utils import shuffle
+import tensorflow_addons as tfa
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.callbacks import TensorBoard
@@ -43,24 +44,7 @@ logdir = config.LOG_DIR+ "/gen_" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1, profile_batch=1)
 run_opts = tf.compat.v1.RunOptions(report_tensor_allocations_upon_oom = True)
 
-def SM_SSIMLoss(ref_img, gen_img):
-    one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
-    two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
-    rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
-    rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
-    loss = tf.image.ssim_multiscale(ref_img, gen_img, max_val=2, filter_size=3)
-    return tf.reduce_mean(loss)
 
-def mixLoss(ref_img, gen_img):
-    one = tf.cast(tf.broadcast_to(1, shape=ref_img.shape), dtype=tf.float32)
-    two = tf.cast(tf.broadcast_to(2, shape=ref_img.shape), dtype=tf.float32)
-    rescaled_ref_img = tf.abs(tf.divide(tf.add(one, ref_img), two))
-    rescaled_gen_img = tf.abs(tf.divide(tf.add(one, gen_img), two))
-    l1_loss = tf.norm(ref_img-gen_img, ord=1, axis=0)/ref_img.shape[0]
-    ms_ssim_loss = tf.reduce_mean(tf.image.ssim_multiscale(rescaled_ref_img, rescaled_gen_img, max_val=1, filter_size=3))
-    alpha = tf.cast(config.GEN_LOSS_ALPHA, dtype=tf.float32)
-    total_loss = alpha*ms_ssim_loss + (1-alpha)*l1_loss
-    return tf.cast(total_loss, dtype=tf.float32)
 
 
 def process_img(img):
@@ -77,7 +61,7 @@ def process_path(file_path):
     return img
 
 def train_gen():
-    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/style datasetU/data', './data/data/MSO/MSOCntImg', 2000
+    lower, higher, root_style_path, root_cnt_path, n = 1, 1100, './data/data/styleU', './data/data/MSO/MSOCntImg', 2000
     idx = np.random.choice(range(lower, higher), n, replace=True)
     for i in idx:
         #i = random.randint(lower, higher)
@@ -96,11 +80,13 @@ def train_gen():
         #     label = 1
         #print(os.path.join(root_path, img1_det['path']), os.path.join(root_path, img2_det['path']))
         try :
-            stl_img = process_path(os.path.join(cnt_det))
-            cnt_img = process_path(os.path.join(root_style_path, stl_det['path']))
-            yield stl_img, cnt_img, stl_det['style_code']
+            cnt_img = process_path(cnt_det)
+            stl_path = os.path.join(root_style_path, stl_det['path'])
+            stl_img = process_path(stl_path)
+            yield stl_img, cnt_img, stl_det['style_code']-1
         except:
-            print(f"Error in file {cnt_det} | {stl_det['path']}")
+            # print(e)
+            print(f"Error in file {cnt_det} | {stl_path}")
             continue
 
 # image resize and rescale pipeline
@@ -128,63 +114,42 @@ def prepare(ds, shuffle=False):
     return ds.prefetch(buffer_size=tf.data.AUTOTUNE)
 
 
-dscLoss = tf.keras.losses.BinaryCrossentropy()
-stlLoss = tf.keras.losses.MeanAbsoluteError()
-
 def add_cnt_loss(dis_loss, gen_loss):
     return dis_loss + config.LAMBDAC*gen_loss
 
 def add_style_loss(dis_loss, gen_loss):
     return dis_loss + config.LAMBDAS*gen_loss
 
-def genLoss(dss_loss, dsc_loss, gen_loss):
+def totalLoss(dss_loss, dsc_loss, gen_loss):
     gan_alpha = config.GAN_ALPHA
     gan_beta = config.GAN_BETA
     one = 1
 
-    tot_loss = tf.cast(dss_loss, dtype=tf.float32) + dsc_loss + 0.5*gen_loss
+    tot_loss = 0.5*dss_loss + 0.5*dsc_loss + gen_loss
     #tot_loss = gan_alpha*(gan_beta*dss_loss+(one-gan_beta)*dsc_loss)+(one-gan_alpha)*gen_loss
     return tf.cast(tot_loss, dtype=tf.float32)
 
 @tf.function
-def train_step(style_in, cnt_in, stly):
+def train_step(cnt_in, style_in, stly):
     with tf.GradientTape() as gen_tape:
         gen_img = gen_model([cnt_in, style_in])
         cnt_vec, gen_vec = cnt_base_model(cnt_in), cnt_base_model(gen_img)
         gen_vec1 = stl_base_model(gen_img)
         
         cnt_loss = pairWiseRankingLoss(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
-        stl_loss = stlLoss(gen_vec1, stly)
-        gen_loss = stlLoss(cnt_in, gen_img)
-        total_loss = genLoss(stl_loss,cnt_loss, gen_loss)
+        stl_loss = stlLoss(stly, gen_vec1)
+        gen_loss = genLoss(cnt_in, gen_img)
+        total_loss = totalLoss(stl_loss,cnt_loss, gen_loss)
 
     grads = gen_tape.gradient(total_loss, gen_model.trainable_variables)
     opt.apply_gradients(zip(grads, gen_model.trainable_variables))
-    stl_metrics.update_state(gen_vec1, stly)
-    cnt_metrics.update_state(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
+    #stl_metrics.update_state(gen_vec1, stly)
+    #cnt_metrics.update_state(cnt_vec, gen_vec, tf.cast(tf.broadcast_to(1, shape=[cnt_vec.shape[0]]), dtype=tf.bool))
     return total_loss, gen_loss, cnt_loss, stl_loss
 
-def load_pixel_metrics(filename):
-    full_mat = np.load(filename)
-    style_pixels = (full_mat['style']-127.5)/127.5
-    content_pixels = (full_mat['cotent']-127.5)/127.5
-    transfer_mat  = (full_mat['transfers']-127.5)/127.5
-    return style_pixels, content_pixels, transfer_mat
-
-def generate_samples(dataset, n_samples, patch_shape):
-    style, content= dataset.take(n_samples)
-    return [cnt_pixels, style_pixels, mat_pixels], y_dc, y_ds
-
-def generate_fake_samples(g_model, samples, patch_shape):
-    cnt_img, style_img = samples
-    X = g_model([cnt_img, style_img])
-    y_dc = zeros((len(X), patch_shape, patch_shape, 1))
-    y_ds = zeros((len(X)))
-    return X, y_dc, y_ds
-
 def summarize_performance(step, g_model, dataset, n_samples=3):
-    stl_sample, cnt_sample = dataset
-    gen_sample = g_model([stl_sample, cnt_sample])
+    cnt_sample, stl_sample = dataset
+    gen_sample = g_model([cnt_sample, stl_sample])
     #rescale pixels values
     X_cnt = (cnt_sample+1)/2
     X_stl = (stl_sample+1)/2
@@ -203,7 +168,7 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
         pyplot.axis('off')
         pyplot.imshow(X_trn[i])
     # save result image 
-    filename = f'plot_{step+1}.png'
+    filename = f'plot_s{step+1}.png'
     pyplot.savefig(os.path.join(config.GAN_LOG_DIR,filename))
     pyplot.close()
     # save model checkpoint
@@ -215,32 +180,32 @@ def summarize_performance(step, g_model, dataset, n_samples=3):
 
 def train(epochs=3):
     #tensorboard_callback.set_model(desc_pre_model)
-    plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'loss' : ['total_loss', 'gen_loss', 'stl_loss', 'cnt_loss'], 'accuracy' : ['stl_acc', 'cnt_acc']})
+    plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'loss' : ['total_loss', 'gen_loss', 'stl_loss', 'cnt_loss']})
     for epoch in range(epochs):
         start_time = time.time()
         
         # Iterate over the batches of the dataset.
-        for step, (cnt_batch, style_batch, stly_batch) in enumerate(train_dataset):
+        for step, (style_batch, cnt_batch, stly_batch) in enumerate(train_dataset):
             total_loss, gen_loss, cnt_loss, stl_loss = train_step(cnt_batch, style_batch, stly_batch)
 
         # Run a validation loop at the end of each epoch.
         # for x_batch_val, y_batch_val in val_dataset:
         #     val_loss = val_step(x_batch_val, y_batch_val)
 
-        stl_acc = stl_metrics.result()
-        cnt_acc = cnt_metrics.result()
+        #stl_acc = stl_metrics.result()
+        #cnt_acc = cnt_metrics.result()
         plotlosses.update({
             'total_loss' : total_loss,
             'gen_loss' : gen_loss,
             'stl_loss' : stl_loss,
-            'cnt_loss' : cnt_loss,
-            'stl_acc' : stl_acc,
-            'cnt_acc' : cnt_acc
+            'cnt_loss' : cnt_loss
+            #'stl_acc' : stl_acc,
+            #'cnt_acc' : cnt_acc
         })
         plotlosses.send()
 
-        stl_metrics.reset_states()
-        cnt_metrics.reset_states()
+        #stl_metrics.reset_states()
+        #cnt_metrics.reset_states()
         # val_acc = val_metrics.result()
         # val_metrics.reset_states()
         # print("Validation acc: %.4f" % (float(val_acc),))
@@ -293,7 +258,7 @@ def train(epochs=3):
 #%%
 if __name__ == "__main__":
     #load dataset
-    stenc_df = pd.read_csv('./data/data/style datasetU/StyleEnc.csv', index_col=0)
+    stenc_df = pd.read_csv('./data/data/styleU/StyleEnc.csv', index_col=0)
     train_path = pathlib.Path(os.path.join(config.DESC_ROOT_DIR,'train'))
     train_ds = tf.data.Dataset.from_generator(
         train_gen,
@@ -306,26 +271,25 @@ if __name__ == "__main__":
     )
     train_dataset = prepare(train_ds, shuffle=True)
 
-    cnt_model_dir = "./data/models/descc_wgt2.h5"
-    stl_model_dir = "./data/models/descs_wgt2.h5"
-    stl_base_model = define_stl_regressor(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
-    #stl_base_model.load_weights(stl_model_dir)
+    cnt_model_dir = "./data/models/descc_wgt4.h5"
+    stl_model_dir = "./data/models/dess_wgt5.h5"
+    stl_base_model = stl_encoder(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
+    stl_base_model.load_weights(stl_model_dir)
     cnt_base_model = define_cnt_encoder(config.DESCC_LATENT_SIZE, config.IMAGE_SHAPE)
     cnt_base_model.load_weights(cnt_model_dir)
 
-    gen_model = define_generator(cnt_base_model, stl_base_model, (128, 128, 3))
+    gen_model = define_generator(cnt_base_model, stl_base_model)
 
     train_steps = 100
-    lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-3, train_steps, 1e-5, 2)
+    lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-4, train_steps, 1e-5, 2)
     opt = tf.optimizers.Adam(lr_fn)
 
     #stl_metrics = MarginalAcc()
-    stlLoss = tf.keras.losses.MeanSquaredError()
-    stl_metrics = tf.keras.metrics.MeanAbsoluteError()
-    cnt_metrics = MarginalAcc()
+    stlLoss = tfa.losses.TripletSemiHardLoss()
+    genLoss = tf.keras.losses.MeanAbsoluteError()
+    #stl_metrics = tf.keras.metrics.MeanAbsoluteError()
+    #cnt_metrics = MarginalAcc()
     #train model
     train(config.GAN_EPOCHS)
-
-
 
 # %%
