@@ -8,11 +8,11 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from numpy import load, vstack, expand_dims
 import matplotlib.pyplot as plt
-from src.model.cntdesc_model import define_cnt_encoder, ContentNet
+from src.model.cntdesc_model import define_cont_encoder, ContentNet
 
 
 #%%
-model_dir = "data/models/descc_wgt2.h5"
+model_dir = "data/models/descc_wgt4.h5"
 style_image_dir = "data/data/styles/the_scream.jpg"
 content_image_dir = "data/data/styles/sample.jpg"
 
@@ -48,7 +48,7 @@ def load_image(img):
 
 def plot_images(cnt_img, style_img, gen_img):
     images = vstack((cnt_img, style_img, gen_img))
-    images = (images+1)/2.0
+    images = (images+1)/2
     titles = ['Content image', 'Style image', 'Generated image']
 
     for i in range(len(images)):
@@ -86,10 +86,10 @@ def evaluate(model, dataset, n_samples):
         plt.title(str(dis2[i]))
         plt.imshow(rescale(samples[i][2]))
     plt.show()
-
+#%%
 if __name__ == '__main__':
     dv_mat = np.swapaxes(np.load('./data/data/desc_validation.npz')['content'], 0, 1)[500:, ...]
-    model = define_cnt_encoder(32, (128, 128, 3))
+    model = define_cont_encoder(32, (128, 128, 3))
     model.load_weights(model_dir)
     n_samples = 4
     evaluate(model, dv_mat, n_samples)

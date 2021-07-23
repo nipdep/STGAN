@@ -16,7 +16,7 @@ import config
 from src.model.stldesc_model import define_desc_encoder, StyleNet, define_stl_encoder
 
 #%%
-model_dir = "./data/models/dess_m006.h5"
+model_dir = "./data/models/dess_m009.h5"
 style_image_dir = "data/data/styles/the_scream.jpg"
 content_image_dir = "data/data/styles/sample.jpg"
 
@@ -58,7 +58,7 @@ def plot_result(images, y, preds):
         plt.subplot(l, 1, 1+i)
         plt.axis('off')
         plt.imshow(images[i])
-        plt.title(f'pred:{round(preds[i].numpy()[0])}|y:{y[i]}')
+        plt.title(f'pred:{round(preds[i])}|y:{y[i]}')
     plt.show()
     plt.savefig("sample.jpg")
     plt.close()
@@ -92,7 +92,8 @@ def evaluate(df, n_samples, root, model):
             samples = pixels
             t +=1
     samples = np.squeeze(samples)
-    preds = model(samples)
+    preds = tf.math.argmax(model(samples), axis=1).numpy()+1
+    print(preds)
     plot_result(samples, y, preds)
 
 #%%
