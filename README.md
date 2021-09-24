@@ -10,6 +10,7 @@ And the model will only extract semantic meaning of the style and the alias feat
 in the research we introduce two distinct model architectures with different bias to two fuctionalities.
 ### Architecture : 1
 In the Geneerative model U-net based encoder-decoder model implement but the encdoer takes 6 channels as the input. Output from the generator model will feed into seperate discriminator model to calculate the similarity between generated image - style image and calculate similarity between generated image - content image to evaluate semantic style representation and object rescontruction respectively. Because of the complete GAN architechure supports two inputs, in the trained model you can both style image and content image that want embed style into not like in usual NST model.
+![Architechure-1 high-level representation](/logs/appr_1_gan.png)
 
 ### Architecture : 2
 
