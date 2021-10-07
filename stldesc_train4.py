@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
     train_steps = 100
     lr_fn = tf.optimizers.schedules.PolynomialDecay(1e-4, train_steps, 1e-5, 2)
-    opt = tf.optimizers.Adam(1e-3)
+    opt = tf.optimizers.Adam(lr_fn)
     stlLoss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
     train_metrics = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)
     val_metrics = tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)

@@ -50,7 +50,7 @@ class ContentNet(tf.keras.Model):
 
     @tf.function
     def call(self, inputs):
-        cnt_img, trans_img = inputs
+        cnt_img, trans_img= inputs
         with tf.name_scope("Content") as scope:
             ft1 = self._model(cnt_img)
             #ft1 = tf.math.l2_normalize(ft1, axis=-1)
