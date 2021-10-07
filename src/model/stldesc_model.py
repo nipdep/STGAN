@@ -399,8 +399,8 @@ class EmbStyleNet(tf.keras.Model):
 
 #%%
 def stl_encoder(latent_size, image_size=(128, 128, 3)):
-    # feat_model = tf.keras.applications.densenet.DenseNet121(weights='imagenet', include_top=False, input_shape=image_size)
-    feat_model = tf.keras.applications.vgg16.VGG16(weights='imagenet', include_top=False, input_shape=image_size)
+    feat_model = tf.keras.applications.densenet.DenseNet121(weights='imagenet', include_top=False, input_shape=image_size)
+    # feat_model = tf.keras.applications.vgg16.VGG16(weights='imagenet', include_top=False, input_shape=image_size)
 
     t = False
     for layer in feat_model.layers:
