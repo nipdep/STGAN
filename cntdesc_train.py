@@ -64,7 +64,7 @@ def val_step(st1_img1, st1_img2, st2_img1):
     val_metrics.update_state(vec1, vec3, tf.cast(tf.broadcast_to(0, shape=[vec1.shape[0]]), dtype=tf.bool))
     return total_loss
 
-
+log_dict = {'epoch' : [], 'tr_loss' : [], 'tr_acc' : [], 'val_loss' : [], 'val_acc' : []}
 def train(epochs=3):
     tensorboard_callback.set_model(base_model)
     plotlosses = PlotLosses(outputs=[MatplotlibPlot()], groups={'loss' : ['tr_loss', 'val_loss'], 'accuracy' : ['tr_acc', 'val_acc']})
@@ -83,6 +83,11 @@ def train(epochs=3):
 
         tr_acc = train_metrics.result()
         val_acc = val_metrics.result()
+        log_dict['epoch'].append(epoch)
+        log_dict['tr_loss'].append(train_loss.numpy())
+        log_dict['tr_acc'].append(tr_acc.numpy()[0])
+        log_dict['val_loss'].append(val_loss.numpy())
+        log_dict['val_acc'].append(val_acc.numpy()[0])
         plotlosses.update({
             'tr_loss' : train_loss,
             'tr_acc' : tr_acc,
@@ -130,8 +135,30 @@ if __name__ == '__main__':
     #opt = tf.keras.optimizers.Adam(lr=config.DESCC_INIT_LR)
     train(config.DESCC_EPOCHS)
 
-    filename = 'descc_wgt4.h5'
-    base_model.save_weights(os.path.join(config.MODEL_DIR, filename))
-    logger.info(f">> Saved : {filename}  ")
+    # filename = 'descc_wgt4.h5'
+    # base_model.save_weights(os.path.join(config.MODEL_DIR, filename))
+    # logger.info(f">> Saved : {filename}  ")
 
+# %%
+import matplotlib.pyplot as plt
+# %%
+fig, (ax1, ax2) = plt.subplots(2,1, figsize=(8, 12))
+
+ax1.plot(log_dict['epoch'], log_dict['tr_loss'], '.-')
+ax1.plot(log_dict['epoch'], log_dict['val_loss'], '.-')
+ax1.figure.legend(['train', 'validation'], 
+                 bbox_to_anchor=(1.,1),loc=1, bbox_transform=ax1.transAxes)
+ax1.set_xlabel('epoch')
+ax1.set_ylabel('loss')
+ax1.set_title('style encoder training loss')
+
+ax2.plot(log_dict['epoch'], log_dict['tr_acc'], '.-')
+ax2.plot(log_dict['epoch'], log_dict['val_acc'], '.-')
+ax2.figure.legend(['train', 'validation'], 
+                 bbox_to_anchor=(1.,1),loc=1, bbox_transform=ax2.transAxes)
+ax2.set_xlabel('epoch')
+ax2.set_ylabel('accuracy')
+ax2.set_title('style encoder training accuracy')
+
+plt.show()
 # %%
