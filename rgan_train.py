@@ -166,7 +166,7 @@ def ganLoss(dss_loss, dsc_loss, gen_loss):
     gan_beta = config.GAN_BETA
     one = 1
 
-    tot_loss = dss_loss+dsc_loss+gen_loss
+    tot_loss = 0.5*dss_loss+0.5*dsc_loss+gen_loss
     return tot_loss
 
 def add_cnt_loss(dis_loss, gen_loss):
@@ -233,6 +233,7 @@ def generate_fake_samples(g_model, samples):
     y_dc = zeros((len(X)))
     return X, y_dc
 
+log_dict = {'epoch' : [], 'dss_loss' : [], 'dsc_loss' : [], 'gen_loss' : []}
 def train(g_model, dataset, n_epoch=100, batch_size=16):
     batch_per_epoch = 2016//batch_size
     n_steps = n_epoch*batch_per_epoch
@@ -269,7 +270,10 @@ def train(g_model, dataset, n_epoch=100, batch_size=16):
 
         #logger.info(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_total_loss} | GAN dss loss : {gan_dss_loss} | GAN dsc loss : {gan_dsc_loss}')
         # print(f'[{i}/{n_steps}] : style descriminator total loss : {ds_loss} \n content descriminator total loss : {dc_loss} \n GAN total loss : {gan_loss}')
-         
+        log_dict['epoch'].append(epoch)
+        log_dict['dss_loss'].append(ds_loss.numpy())
+        log_dict['dsc_loss'].append(dc_loss.numpy())
+        log_dict['gen_loss'].append(gan_loss.numpy())
         plotlosses.update({
                 'dss_loss' : ds_loss,
                 'dsc_loss' : dc_loss,
@@ -305,8 +309,8 @@ if __name__ == "__main__":
     cntLoss = tf.keras.losses.MeanAbsoluteError()
 
     gen_opt = tf.keras.optimizers.Adam(1e-4)
-    ds_opt = tf.keras.optimizers.Adam(1e-5)
-    dc_opt = tf.keras.optimizers.Adam(1e-5)
+    ds_opt = tf.keras.optimizers.Adam(1e-4)
+    dc_opt = tf.keras.optimizers.Adam(1e-4)
 
     #init models
     stl_base_model = stl_encoder(config.DESCS_LATENT_SIZE, config.IMAGE_SHAPE)
